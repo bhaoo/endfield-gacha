@@ -21,6 +21,8 @@ import { fetch } from '@tauri-apps/plugin-http';
 import { invoke } from '@tauri-apps/api/core';
 import type { AppConfig, User, UserBindingsResponse } from '~/types/gacha';
 
+const emit = defineEmits(['success']);
+
 const isTesting = ref(false)
 const toast = useToast()
 const token = ref('')
@@ -117,6 +119,7 @@ const saveAccount = async (uid: string) => {
   try {
     await invoke('save_config', { data: config });
     showToast("添加成功", "可以开始进行寻访记录分析力！");
+    emit('success');
     isTesting.value = false
     return;
   } catch (e) {

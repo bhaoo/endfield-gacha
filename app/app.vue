@@ -6,14 +6,14 @@
           <UButton @click="handleSync(uid)" color="primary" :loading="isSyncing" :disabled="isSyncing">
             {{ isSyncing ? '同步中...' : '同步最新数据' }}
           </UButton>
-          <AddAccount></AddAccount>
-          <SelectAccount v-model="uid"></SelectAccount>
+          <AddAccount @success="handleAccountAdded"></AddAccount>
+          <SelectAccount v-model="uid" ref="selectAccountRef"></SelectAccount>
         </div>
         <UPopover>
           <UButton label="更多" color="neutral" variant="subtle" />
           <template #content>
             <UCard>
-              <p>Version 0.2.0</p>
+              <p>Version 0.2.1</p>
               <p>本工具为开源软件，源代码使用 MIT 协议授权</p>
               <p>Github: https://github.com/bhaoo/endfield-gacha</p>
             </UCard>
@@ -114,6 +114,13 @@ onMounted(() => {
     loadFromUserData(uid.value);
   }
 });
+
+const selectAccountRef = ref();
+
+const handleAccountAdded = () => {
+  console.log('检测到新账号，正在刷新列表...');
+  selectAccountRef.value?.refresh();
+};
 
 interface StarRow {
   label: string;

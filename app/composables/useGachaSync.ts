@@ -268,6 +268,10 @@ export const useGachaSync = () => {
 
     const saveStatus = await saveUserData(uid, allData);
 
+    if (saveStatus !== -1) {
+      await loadFromUserData(uid);
+    }
+
     isSyncing.value = false;
     if (saveStatus === -1) {
       showToast("同步失败", "抽卡记录保存失败。");
