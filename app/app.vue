@@ -99,8 +99,20 @@
 <script lang="ts" setup>
 const { records, statistics, isSyncing, handleSync, loadFromUserData } = useGachaSync();
 
+const uid = ref("none")
+
+watch(uid, (newUid) => {
+  if (newUid && newUid !== 'none') {
+    loadFromUserData(newUid);
+  } else {
+    records.value = {}; 
+  }
+});
+
 onMounted(() => {
-  loadFromUserData();
+  if (uid.value && uid.value !== 'none') {
+    loadFromUserData(uid.value);
+  }
 });
 
 interface StarRow {
