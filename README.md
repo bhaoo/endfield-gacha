@@ -9,6 +9,13 @@
 一款适用于 Windows 客户端的寻访统计小工具
 </p>
 
+<p align="center">
+    <img src="https://img.shields.io/github/license/bhaoo/endfield-gacha?style=flat-square" />
+    <img src="https://img.shields.io/github/v/release/bhaoo/endfield-gacha?style=flat-square" />
+    <img src="https://img.shields.io/github/last-commit/bhaoo/endfield-gacha/master?style=flat-square&label=update" />
+    <img src="https://img.shields.io/github/downloads/bhaoo/endfield-gacha/total?style=flat-square" />
+</p>
+
 ## 预览
 
 ![Preview](preview.png)
@@ -25,6 +32,6 @@
 
 ## 最后
 
-感谢 [@RolingG](https://github.com/RoLingG) 帮助处理后端相关数据！
+感谢 [@RoLingG](https://github.com/RoLingG) 帮助处理后端相关数据！
 
 Copyright &copy; 2026 [Bhao](https://dwd.moe/), under MIT License.
