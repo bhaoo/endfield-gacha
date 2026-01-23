@@ -2,8 +2,8 @@
   "name": "endfield-gacha",
   "type": "module",
   "author": "Bhao",
-  "license":"MIT",
-  "version": "0.1.0",
+  "license": "MIT",
+  "version": "0.2.0",
   "private": true,
   "scripts": {
     "build": "nuxt build",

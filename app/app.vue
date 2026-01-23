@@ -13,7 +13,7 @@
           <UButton label="更多" color="neutral" variant="subtle" />
           <template #content>
             <UCard>
-              <p>Version 0.1.0</p>
+              <p>Version 0.2.0</p>
               <p>本工具为开源软件，源代码使用 MIT 协议授权</p>
               <p>Github: https://github.com/bhaoo/endfield-gacha</p>
             </UCard>
