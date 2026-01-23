@@ -23,4 +23,8 @@
 
 数据会保存在与可运行程序同级目录下的 `/userData` 目录中，暂时不支持多账号，还在努力开发中 ❤ ！
 
+## 最后
+
+感谢 [@RolingG](https://github.com/RoLingG) 帮助处理后端相关数据！
+
 Copyright &copy; 2026 [Bhao](https://dwd.moe/), under MIT License.
