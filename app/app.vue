@@ -2,11 +2,15 @@
   <UApp>
     <UContainer class="mt-3 space-y-4">
       <div class="flex justify-between items-center">
-        <UButton @click="handleSync" color="primary" :loading="isSyncing" :disabled="isSyncing">
-          {{ isSyncing ? '同步中...' : '同步最新数据' }}
-        </UButton>
+        <div class="flex items-center gap-2">
+          <UButton @click="handleSync(uid)" color="primary" :loading="isSyncing" :disabled="isSyncing">
+            {{ isSyncing ? '同步中...' : '同步最新数据' }}
+          </UButton>
+          <AddAccount></AddAccount>
+          <SelectAccount v-model="uid"></SelectAccount>
+        </div>
         <UPopover>
-          <UButton label="更多" color="neutral" variant="subtle"/>
+          <UButton label="更多" color="neutral" variant="subtle" />
           <template #content>
             <UCard>
               <p>Version 0.1.0</p>
@@ -17,7 +21,13 @@
         </UPopover>
       </div>
 
-      <div v-if="statistics.length > 0" class="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div v-if="uid === 'none' || !uid" class="text-center text-gray-500 py-16">
+        <div class="mb-2 text-4xl">👋</div>
+        <p class="text-lg font-medium">欢迎使用</p>
+        <p class="text-sm mt-1">请先点击左上角添加账号，或选择一个已有账号。</p>
+      </div>
+
+      <div v-else-if="statistics.length > 0" class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <UCard v-for="stat in statistics" :key="stat.poolName">
           <template #header>
             <div class="flex justify-between items-center">
