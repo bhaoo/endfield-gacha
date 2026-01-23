@@ -11,7 +11,7 @@
             <UCard>
               <p>Version 0.1.0</p>
               <p>本工具为开源软件，源代码使用 MIT 协议授权</p>
-              <p>Github: <a href="https://github.com/bhaoo/endfield-gacha">https://github.com/bhaoo/endfield-gacha</a></p>
+              <p>Github: https://github.com/bhaoo/endfield-gacha</p>
             </UCard>
           </template>
         </UPopover>
@@ -99,7 +99,6 @@ interface StarRow {
   color: string;
 }
 
-// 2. 转换函数：把 stat 对象转成数组，供 v-for 使用
 const getStarRows = (stat: any): StarRow[] => [
   { label: '6★', count: stat.count6, color: 'text-orange-400' },
   { label: '5★', count: stat.count5, color: 'text-yellow-400' },
@@ -113,7 +112,7 @@ const getPercent = (count: number, total: number) => {
 
 
 const getAvg = (count: number, total: number) => {
-  if (count <= 0) return '0.00'; // 避免除以 0
+  if (count <= 0) return '0.00';
   return (total / count).toFixed(2);
 };
 </script>
