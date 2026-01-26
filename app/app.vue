@@ -18,9 +18,10 @@
           <UButton label="更多" color="neutral" variant="subtle" />
           <template #content>
             <UCard>
-              <p>Version 0.2.1</p>
+              <p>Version 0.3.0</p>
               <p>本工具为开源软件，源代码使用 MIT 协议授权</p>
-              <p>Github: https://github.com/bhaoo/endfield-gacha</p>
+              <p>祝各位大佬欧气满满！如果可以的话，可以给我一个 Star ⭐ 嘛！</p>
+              <p>Github: <ULink @click="open('https://github.com/bhaoo/endfield-gacha')" class="text-primary">https://github.com/bhaoo/endfield-gacha</ULink></p>
             </UCard>
           </template>
         </UPopover>
@@ -33,9 +34,11 @@
 </template>
 
 <script lang="ts" setup>
+import { openUrl } from '@tauri-apps/plugin-opener';
+
 const { charRecords, weaponRecords, isSyncing, handleSync, loadCharData, loadWeaponData } = useGachaSync();
 
-const { uidList, loadConfig } = useUserStore();
+const { loadConfig } = useUserStore();
 const route = useRoute()
 const uid = useState<string>('current-uid', () => 'none')
 const gachaType = computed(() => {
@@ -67,6 +70,14 @@ onMounted(() => {
 const onSyncClick = () => {
   handleSync(uid.value, gachaType.value);
 }
+
+const open = async (url: string) => {
+  try {
+    await openUrl(url);
+  } catch (error) {
+    console.error(error);
+  }
+};
 
 const handleAccountAdded = () => {
   console.log('账号添加成功，全局列表已自动更新');
