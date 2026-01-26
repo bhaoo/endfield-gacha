@@ -7,7 +7,7 @@
             {{ isSyncing ? '同步中...' : '同步最新数据' }}
           </UButton>
           <AddAccount @success="handleAccountAdded"></AddAccount>
-          <SelectAccount v-model="uid" ref="selectAccountRef"></SelectAccount>
+          <SelectAccount v-model="uid"></SelectAccount>
           <NuxtLink :href="route.path === '/' ? '/weapon' : '/'">
             <UButton color="neutral" variant="outline">
               {{ route.path === '/' ? '切换至武器池' : '切换至角色池' }}
@@ -35,6 +35,7 @@
 <script lang="ts" setup>
 const { charRecords, weaponRecords, isSyncing, handleSync, loadCharData, loadWeaponData } = useGachaSync();
 
+const { uidList, loadConfig } = useUserStore();
 const route = useRoute()
 const uid = useState<string>('current-uid', () => 'none')
 const gachaType = computed(() => {
@@ -57,6 +58,7 @@ watch(uid, (newUid) => {
 });
 
 onMounted(() => {
+  loadConfig();
   if (uid.value && uid.value !== 'none') {
     loadAllData(uid.value);
   }
@@ -66,10 +68,7 @@ const onSyncClick = () => {
   handleSync(uid.value, gachaType.value);
 }
 
-const selectAccountRef = ref();
-
 const handleAccountAdded = () => {
-  console.log('检测到新账号，正在刷新列表...');
-  selectAccountRef.value?.refresh();
+  console.log('账号添加成功，全局列表已自动更新');
 };
 </script>

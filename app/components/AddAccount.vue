@@ -21,6 +21,8 @@ import { fetch } from '@tauri-apps/plugin-http';
 import { invoke } from '@tauri-apps/api/core';
 import type { AppConfig, User, UserBindingsResponse } from '~/types/gacha';
 
+const { addUser } = useUserStore();
+
 const emit = defineEmits(['success']);
 
 const isTesting = ref(false)
@@ -104,28 +106,17 @@ const saveAccount = async (uid: string) => {
     token: token.value
   };
 
-  let config: AppConfig = await invoke('read_config');
-  if (!Array.isArray(config.users)) {
-    config.users = [];
-  }
+  isTesting.value = true;
+  
+  const success = await addUser(newUser);
 
-  const existingIndex = config.users.findIndex(u => u.uid === newUser.uid);
-  if (existingIndex !== -1) {
-    config.users[existingIndex] = newUser;
-  } else {
-    config.users.push(newUser);
-  }
+  isTesting.value = false;
 
-  try {
-    await invoke('save_config', { data: config });
+  if (success) {
     showToast("添加成功", "可以开始进行寻访记录分析力！");
     emit('success');
-    isTesting.value = false
-    return;
-  } catch (e) {
+  } else {
     showToast("添加失败", "无法保存至用户配置。");
-    isTesting.value = false
-    return;
   }
 }
 </script>
