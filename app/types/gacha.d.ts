@@ -61,15 +61,26 @@ export interface EndFieldCharInfo {
   seqId: string;
 }
 
+export interface EndFieldWeaponInfo {
+  poolId: string;
+  poolName: string;
+  weaponId: string;
+  weaponName: string;
+  weaponType: string;
+  rarity: number;
+  isNew: boolean;
+  gachaTs: string;
+  seqId: string;
+}
+
+export interface GachaItem {
+  seqId: string;
+  [key: string]: any;
+}
+
 export interface EndFieldGachaData {
   list: EndFieldCharInfo[];
   hasMore: boolean;
-}
-
-export interface EndFieldGachaResponse {
-  code: number;
-  data: EndFieldGachaData;
-  msg: string;
 }
 
 export interface HistoryRecord {

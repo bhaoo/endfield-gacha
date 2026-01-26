@@ -3,17 +3,18 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   AppConfig,
   EndFieldCharInfo,
-  EndFieldGachaResponse,
+  EndFieldWeaponInfo,
+  GachaItem,
 } from "~/types/gacha";
-import {
-  analyzePoolData,
-  delay,
-  parseGachaParams,
-  POOL_TYPES,
-} from "~/utils/gachaCalc";
+import { analyzePoolData, delay, POOL_TYPES } from "~/utils/gachaCalc";
 
 export const useGachaSync = () => {
   const toast = useToast();
+  const isSyncing = ref(false);
+  const user_agent = ref(
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.112 Safari/537.36",
+  );
+
   const showToast = (title: string, desc: string) => {
     toast.add({
       title: title,
@@ -21,41 +22,31 @@ export const useGachaSync = () => {
     });
   };
 
-  const records = ref<Record<string, EndFieldCharInfo[]>>({});
-  const isSyncing = ref(false);
-  const user_agent = ref(
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.112 Safari/537.36",
+  const charRecords = useState<Record<string, EndFieldCharInfo[]>>(
+    "gacha-records-char",
+    () => ({}),
+  );
+  const weaponRecords = useState<Record<string, EndFieldWeaponInfo[]>>(
+    "gacha-records-weapon",
+    () => ({}),
   );
 
-  const statistics = computed(() => {
-    if (!records.value || Object.keys(records.value).length === 0) return [];
-    return Object.keys(records.value).map((poolKey) => {
-      return analyzePoolData(poolKey, records.value[poolKey]);
-    });
-  });
-
-  const loadFromUserData = async (uid: string) => {
+  const loadUserData = async (uid: string, type: "char" | "weapon") => {
+    const command =
+      type === "char" ? "read_char_records" : "read_weapon_records";
     try {
-      const rawLocalData = await invoke<any>("read_gacha_records", { uid });
-
-      let localData: Record<string, EndFieldCharInfo[]> = {};
-
-      if (Array.isArray(rawLocalData) && rawLocalData.length === 0) {
-        localData = {};
-      } else {
-        localData = rawLocalData;
-      }
-
-      records.value = localData;
-    } catch (err) {
-      console.error("loadFromUserData error:", err);
+      const data = await invoke<any>(command, { uid });
+      if (type === "char") charRecords.value = data || {};
+      else weaponRecords.value = data || {};
+    } catch (e) {
+      console.error(e);
     }
   };
 
-  const mergeRecords = (
-    oldRecords: EndFieldCharInfo[],
-    newRecords: EndFieldCharInfo[],
-  ): EndFieldCharInfo[] => {
+  const mergeRecords = <T extends GachaItem>(
+    oldRecords: T[],
+    newRecords: T[],
+  ): T[] => {
     const existingIds = new Set(oldRecords.map((r) => r.seqId));
     const uniqueNewRecords = newRecords.filter(
       (r) => !existingIds.has(r.seqId),
@@ -75,51 +66,38 @@ export const useGachaSync = () => {
 
   const saveUserData = async (
     uid: string,
-    fetchedData: Record<string, EndFieldCharInfo[]>,
+    newData: any,
+    type: "char" | "weapon",
   ) => {
-    try {
-      if (!uid) {
-      }
+    const commandRead =
+      type === "char" ? "read_char_records" : "read_weapon_records";
+    const commandSave =
+      type === "char" ? "save_char_records" : "save_weapon_records";
 
-      const rawLocalData = await invoke<any>("read_gacha_records", { uid });
+    const oldAllData = (await invoke<any>(commandRead, { uid })) || {};
+    let totalNew = 0;
 
-      let localData: Record<string, EndFieldCharInfo[]> = {};
-
-      if (Array.isArray(rawLocalData) && rawLocalData.length === 0) {
-        localData = {};
-      } else {
-        localData = rawLocalData;
-      }
-
-      let totalNewCount = 0;
-
-      for (const [poolType, newRecords] of Object.entries(fetchedData)) {
-        const oldRecords = localData[poolType] || [];
-        const mergedList = mergeRecords(oldRecords, newRecords);
-        totalNewCount += mergedList.length - oldRecords.length;
-        localData[poolType] = mergedList;
-      }
-
-      if (totalNewCount > 0) {
-        await invoke("save_gacha_records", { uid, data: localData });
-        console.log(`保存成功，共新增 ${totalNewCount} 条记录`);
-        return totalNewCount;
-      } else {
-        console.log("数据已是最新");
-        return 0;
-      }
-    } catch (err) {
-      console.error("saveUserData error:", err);
-      return -1;
+    for (const [poolKey, list] of Object.entries(newData)) {
+      const oldList = oldAllData[poolKey] || [];
+      const merged = mergeRecords(oldList as GachaItem[], list as GachaItem[]);
+      totalNew += merged.length - oldList.length;
+      oldAllData[poolKey] = merged;
     }
+
+    if (totalNew > 0) {
+      await invoke(commandSave, { uid, data: oldAllData });
+    }
+    return totalNew;
   };
 
-  const fetchPoolData = async (u8_token: string, poolType: string) => {
-    const allData: EndFieldCharInfo[] = [];
+  const fetchPaginatedData = async <T extends GachaItem>(
+    u8_token: string,
+    baseUrl: string,
+    extraParams: Record<string, string>,
+  ): Promise<T[]> => {
+    const allData: T[] = [];
     let nextSeqId = "";
     let hasMore = true;
-
-    const apiBaseUrl = "https://ef-webview.hypergryph.com/api/record/char";
 
     try {
       while (hasMore) {
@@ -127,166 +105,175 @@ export const useGachaSync = () => {
           lang: "zh-cn",
           token: u8_token,
           server_id: "1",
-          pool_type: poolType,
+          ...extraParams,
         });
         if (nextSeqId) query.set("seq_id", nextSeqId);
 
-        const response = await fetch(`${apiBaseUrl}?${query.toString()}`, {
+        const response = await fetch(`${baseUrl}?${query.toString()}`, {
           method: "GET",
-          headers: {
-            "User-Agent": user_agent.value,
-          },
+          headers: { "User-Agent": user_agent.value },
         });
 
-        if (!response.ok) {
-          isSyncing.value = false;
-          showToast("同步失败", "获取寻访记录数据失败。");
-          return;
-        }
+        if (!response.ok) throw new Error("Network response was not ok");
+        const res = await response.json();
 
-        const res = (await response.json()) as EndFieldGachaResponse;
+        if (res.code !== 0 || !res.data?.list) break;
 
-        if (res.code !== 0 || !res.data.list?.length) {
-          isSyncing.value = false;
-          showToast("同步失败", "获取寻访记录数据失败。");
-          return;
-        }
+        const list = res.data.list as T[];
+        if (list.length === 0) break;
 
-        const list = res.data.list;
-
-        if (list.length === 0) {
-          isSyncing.value = false;
-          showToast("同步失败", "获取寻访记录数据异常。");
-          return;
-        }
-
-        allData.push(...res.data.list);
+        allData.push(...list);
         hasMore = res.data.hasMore;
+        nextSeqId = list[list.length - 1]!.seqId;
 
-        const lastItem = list[list.length - 1];
-        nextSeqId = lastItem.seqId;
-
-        if (hasMore) {
-          await delay(500, 1000);
-        }
+        if (hasMore) await delay(500, 1000);
       }
-
-      return allData;
     } catch (error) {
-      console.error("fetchPoolData error:", error);
-      return allData;
+      console.error(`Fetch error for ${JSON.stringify(extraParams)}:`, error);
     }
+    return allData;
   };
 
-  const getUserToken = async (uid: string) => {
-    if (!uid) return null;
-
+  const getAuthToken = async (uid: string) => {
     try {
       const config = await invoke<AppConfig>("read_config");
       const targetUser = config.users?.find((u) => u.uid === uid);
-      return targetUser ? targetUser.token : null;
-    } catch (error) {
-      console.error(`getUserToken ${uid} error: `, error);
+      if (!targetUser?.token) return null;
+
+      const authRes = await fetch(
+        "https://as.hypergryph.com/user/oauth2/v2/grant",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "User-Agent": user_agent.value,
+          },
+          body: JSON.stringify({
+            type: 1,
+            appCode: "be36d44aa36bfb5b",
+            token: targetUser.token,
+          }),
+        },
+      );
+      if (!authRes.ok) return null;
+      const authData = await authRes.json();
+
+      const u8Res = await fetch(
+        "https://binding-api-account-prod.hypergryph.com/account/binding/v1/u8_token_by_uid",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "User-Agent": user_agent.value,
+          },
+          body: JSON.stringify({ uid, token: authData.data.token }),
+        },
+      );
+      if (!u8Res.ok) return null;
+      const u8Data = await u8Res.json();
+      return u8Data.data.token;
+    } catch (e) {
+      console.error("Auth error", e);
       return null;
     }
   };
 
-  const getU8Token = async (uid: string, token: string) => {
-    if (!uid || !token) return null;
+  const syncCharacters = async (uid: string, u8_token: string) => {
+    const fetched: Record<string, EndFieldCharInfo[]> = {};
+    for (const poolType of POOL_TYPES) {
+      fetched[poolType] = await fetchPaginatedData<EndFieldCharInfo>(
+        u8_token,
+        "https://ef-webview.hypergryph.com/api/record/char",
+        { pool_type: poolType },
+      );
+    }
+    return await saveUserData(uid, fetched, "char");
+  };
 
-    const apiBaseUrl =
-      "https://binding-api-account-prod.hypergryph.com/account/binding/v1/u8_token_by_uid";
-    const payload = {
-      uid: uid,
-      token: token,
-    };
-
-    const response = await fetch(apiBaseUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": user_agent.value,
-      },
-      body: JSON.stringify(payload),
+  const syncWeapons = async (uid: string, u8_token: string) => {
+    const query = new URLSearchParams({
+      lang: "zh-cn",
+      token: u8_token,
+      server_id: "1",
     });
-
-    if (!response.ok) {
-      return null;
+    const poolRes = await fetch(
+      `https://ef-webview.hypergryph.com/api/record/weapon/pool?${query.toString()}`,
+      {
+        headers: { "User-Agent": user_agent.value },
+      },
+    );
+    const poolJson = await poolRes.json();
+    if (poolJson.code !== 0 || !poolJson.data) {
+      throw new Error(`获取武器池列表失败: ${poolJson.msg}`);
     }
 
-    const data = await response.json();
-    return data.data.token;
+    const pools = poolJson.data as { poolId: string; poolName: string }[];
+    const fetched: Record<string, EndFieldWeaponInfo[]> = {};
+
+    for (const pool of pools) {
+      console.log(`正在同步武器池: ${pool.poolName}`);
+      fetched[pool.poolId] = await fetchPaginatedData<EndFieldWeaponInfo>(
+        u8_token,
+        "https://ef-webview.hypergryph.com/api/record/weapon",
+        { pool_id: pool.poolId },
+      );
+    }
+    return await saveUserData(uid, fetched, "weapon");
   };
 
-  const handleSync = async (uid: string) => {
+  const handleSync = async (uid: string, type: "char" | "weapon" = "char") => {
     if (isSyncing.value) return;
     isSyncing.value = true;
+    showToast(
+      "同步开始",
+      `正在获取${type === "char" ? "干员" : "武器"}数据...`,
+    );
 
-    const token = await getUserToken(uid);
-    if (!token) {
+    try {
+      const token = await getAuthToken(uid);
+      if (!token) throw new Error("Token 获取失败，请重新登录");
+
+      let count = 0;
+      if (type === "char") {
+        count = await syncCharacters(uid, token);
+      } else {
+        count = await syncWeapons(uid, token);
+      }
+
+      await loadUserData(uid, type);
+
+      if (count > 0) showToast("同步成功", `新增 ${count} 条寻访记录！`);
+      else showToast("同步成功", "已经是最新的啦！如果是刚抽的话可能有延迟哦~");
+    } catch (err: any) {
+      showToast("同步失败", err.message || "未知错误");
+      console.error(err);
+    } finally {
       isSyncing.value = false;
-      showToast("同步失败", "UID 为空，请选择一个 UID。");
-      return;
-    }
-
-    const apiBaseUrl = "https://as.hypergryph.com/user/oauth2/v2/grant";
-    const payload = {
-      type: 1,
-      appCode: "be36d44aa36bfb5b",
-      token: token,
-    };
-
-    const response = await fetch(apiBaseUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "User-Agent": user_agent.value,
-      },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      isSyncing.value = false;
-      showToast("同步失败", "token 可能过期，请重新添加账号 token。");
-      return;
-    }
-
-    const data = await response.json();
-    const u8_token = await getU8Token(uid, data.data.token);
-    if (!u8_token) {
-      isSyncing.value = false;
-      showToast("同步失败", "无法获取 u8_token。");
-      return;
-    }
-
-    const allData: Record<string, EndFieldCharInfo[]> = {};
-    for (const poolType of POOL_TYPES) {
-      console.log(`Get ${poolType}`);
-      const poolData = await fetchPoolData(u8_token, poolType);
-      allData[poolType] = poolData;
-    }
-
-    const saveStatus = await saveUserData(uid, allData);
-
-    if (saveStatus !== -1) {
-      await loadFromUserData(uid);
-    }
-
-    isSyncing.value = false;
-    if (saveStatus === -1) {
-      showToast("同步失败", "抽卡记录保存失败。");
-    } else if (saveStatus === 0) {
-      showToast("同步成功", "已经是最新的啦！如果是刚抽的话可能有延迟哦~");
-    } else {
-      showToast("同步成功", `新增 ${saveStatus} 条寻访记录！`);
     }
   };
 
+  const charStatistics = computed(() => {
+    if (!charRecords.value) return [];
+    return Object.keys(charRecords.value).map((k) =>
+      analyzePoolData(k, charRecords.value[k]!),
+    );
+  });
+
+  const weaponStatistics = computed(() => {
+    if (!weaponRecords.value) return [];
+    return Object.keys(weaponRecords.value).map((k) =>
+      analyzeWeaponPoolData(k, weaponRecords.value[k]!),
+    );
+  });
+
   return {
-    records,
-    statistics,
+    charRecords,
+    weaponRecords,
+    charStatistics,
+    weaponStatistics,
     isSyncing,
-    loadFromUserData,
     handleSync,
+    loadCharData: (uid: string) => loadUserData(uid, "char"),
+    loadWeaponData: (uid: string) => loadUserData(uid, "weapon"),
   };
 };

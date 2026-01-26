@@ -19,7 +19,7 @@ fn get_config_path() -> Result<PathBuf, String> {
     Ok(root.join("config.json"))
 }
 
-fn get_gacha_record_path(uid: &str) -> Result<PathBuf, String> {
+fn get_record_path(uid: &str) -> Result<PathBuf, String> {
     let root = get_userdata_dir()?;
     let gacha_dir = root.join("gachaData");
 
@@ -28,6 +28,23 @@ fn get_gacha_record_path(uid: &str) -> Result<PathBuf, String> {
     }
 
     Ok(gacha_dir.join(format!("{}.json", uid)))
+}
+
+fn load_full_record(uid: &str) -> Result<serde_json::Value, String> {
+    let file_path = get_record_path(uid)?;
+    
+    if !file_path.exists() {
+        return Ok(serde_json::json!({})); 
+    }
+
+    let content = fs::read_to_string(file_path).map_err(|e| e.to_string())?;
+    let data: serde_json::Value = serde_json::from_str(&content).unwrap_or(serde_json::json!({}));
+    
+    if !data.is_object() {
+        return Ok(serde_json::json!({}));
+    }
+
+    Ok(data)
 }
 
 #[command]
@@ -52,33 +69,55 @@ fn read_config() -> Result<serde_json::Value, String> {
 }
 
 #[command]
-fn save_gacha_records(uid: String, data: serde_json::Value) -> Result<String, String> {
+fn save_char_records(uid: String, data: serde_json::Value) -> Result<String, String> {
     if uid.trim().is_empty() {
         return Err("UID cannot be empty".into());
     }
 
-    let file_path = get_gacha_record_path(&uid)?;
-    let json_string = serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?;
+    let mut full_data = load_full_record(&uid)?;
+    full_data["character"] = data;
+
+    let file_path = get_record_path(&uid)?;
+    let json_string = serde_json::to_string_pretty(&full_data).map_err(|e| e.to_string())?;
     fs::write(file_path, json_string).map_err(|e| e.to_string())?;
     Ok(format!("UID {} data saved successfully", uid))
 }
 
 #[command]
-fn read_gacha_records(uid: String) -> Result<serde_json::Value, String> {
+fn read_char_records(uid: String) -> Result<serde_json::Value, String> {
     if uid.trim().is_empty() {
         return Err("UID cannot be empty".into());
     }
 
-    let file_path = get_gacha_record_path(&uid)?;
-
-    if !file_path.exists() {
-        return Ok(serde_json::json!([]));
-    }
-
-    let content = fs::read_to_string(file_path).map_err(|e| e.to_string())?;
-    let data: serde_json::Value = serde_json::from_str(&content).map_err(|e| e.to_string())?;
-    Ok(data)
+    let full_data = load_full_record(&uid)?;
+    let char_data = full_data.get("character").unwrap_or(&serde_json::json!({})).clone();
+    Ok(char_data)
 }
+
+#[command]
+fn save_weapon_records(uid: String, data: serde_json::Value) -> Result<String, String> {
+    if uid.trim().is_empty() { return Err("UID cannot be empty".into()); }
+
+    let mut full_data = load_full_record(&uid)?;
+
+    full_data["weapon"] = data;
+
+    let file_path = get_record_path(&uid)?;
+    let json_string = serde_json::to_string_pretty(&full_data).map_err(|e| e.to_string())?;
+    fs::write(file_path, json_string).map_err(|e| e.to_string())?;
+
+    Ok(format!("UID {} weapon data saved", uid))
+}
+
+#[command]
+fn read_weapon_records(uid: String) -> Result<serde_json::Value, String> {
+    if uid.trim().is_empty() { return Err("UID cannot be empty".into()); }
+
+    let full_data = load_full_record(&uid)?;
+    let weapon_data = full_data.get("weapon").unwrap_or(&serde_json::json!({})).clone();
+    Ok(weapon_data)
+}
+
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -89,8 +128,10 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             save_config,
             read_config,
-            save_gacha_records,
-            read_gacha_records
+            save_char_records,
+            read_char_records,
+            save_weapon_records,
+            read_weapon_records
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {
