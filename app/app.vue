@@ -18,7 +18,7 @@
           <UButton label="更多" color="neutral" variant="subtle" />
           <template #content>
             <UCard>
-              <p>Version 0.3.0</p>
+              <p>Version 0.3.1</p>
               <p>本工具为开源软件，源代码使用 MIT 协议授权</p>
               <p>祝各位大佬欧气满满！如果可以的话，可以给我一个 Star ⭐ 嘛！</p>
               <p>Github: <ULink @click="open('https://github.com/bhaoo/endfield-gacha')" class="text-primary">https://github.com/bhaoo/endfield-gacha</ULink></p>
