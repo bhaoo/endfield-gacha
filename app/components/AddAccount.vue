@@ -1,15 +1,51 @@
 <template>
-  <UModal title="添加账号">
+  <UModal v-model="isOpen" title="添加账号">
     <UButton icon="i-lucide-user-round-plus" size="md" color="neutral" variant="outline" />
     <template #body>
-      <div class="flex flex-col items-center">
-        <div class="flex flex-col md:flex-row items-center gap-2 mb-5">
-          <UInput v-model="token" />
-          <UButton @click="testToken" :loading="isTesting" :disabled="isTesting">确认</UButton>
+      <div class="flex flex-col gap-4 p-2">
+        
+        <div class="flex flex-col items-center justify-center border-b border-gray-100 dark:border-gray-800 pb-5">
+          <UButton 
+            @click="handleWebLogin" 
+            :loading="isLoggingIn"
+            :disabled="isProcessing"
+            size="xl"
+            color="neutral"
+            variant="outline"
+            class="w-full justify-center"
+            icon="i-heroicons-globe-alt"
+          >
+            {{ isLoggingIn ? '正在监听登录...' : '打开官网登录并自动获取' }}
+          </UButton>
+          <p class="text-xs text-gray-400 mt-2">
+            推荐使用。将在应用内打开鹰角官网，登录后自动抓取 Token。
+          </p>
         </div>
-        <p class="text-center text-gray-500 text-sm">* 请先在鹰角网络<ULink @click="open('https://user.hypergryph.com/')"
+
+        <div class="space-y-3">
+          <p class="text-sm font-bold text-gray-700 dark:text-gray-200">手动输入 Token</p>
+          <div class="flex gap-2">
+            <UInput 
+              v-model="token" 
+              placeholder="请粘贴 Token" 
+              class="flex-1"
+              :disabled="isProcessing" 
+            />
+            <UButton 
+              @click="handleManualAdd" 
+              :loading="isProcessing" 
+              :disabled="!token || isProcessing"
+            >
+              确定
+            </UButton>
+          </div>
+          <p class="text-xs text-gray-400">
+            * 选择手动输入 Token 时，请先在鹰角网络<ULink @click="open('https://user.hypergryph.com/')"
             class="text-primary">官网</ULink>登录账号后，通过<ULink
-            @click="open('https://web-api.hypergryph.com/account/info/hg')" class="text-primary">接口</ULink>获取token。</p>
+            @click="open('https://web-api.hypergryph.com/account/info/hg')" class="text-primary">接口</ULink>获取token。
+          </p>
+        </div>
+
       </div>
     </template>
   </UModal>
@@ -18,24 +54,17 @@
 <script setup lang="ts">
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { fetch } from '@tauri-apps/plugin-http';
-import { invoke } from '@tauri-apps/api/core';
-import type { AppConfig, User, UserBindingsResponse } from '~/types/gacha';
 
 const { addUser } = useUserStore();
 
 const emit = defineEmits(['success']);
+const isOpen = ref(false);
 
-const isTesting = ref(false)
+const isLoggingIn = ref(false);
+const isProcessing = ref(false);
 const toast = useToast()
 const token = ref('')
 const user_agent = ref('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.112 Safari/537.36')
-
-const showToast = (title: string, desc: string) => {
-  toast.add({
-    title: title,
-    description: desc
-  })
-}
 
 const open = async (url: string) => {
   try {
@@ -45,78 +74,135 @@ const open = async (url: string) => {
   }
 };
 
-const testToken = async () => {
-  if (isTesting.value) return;
+const handleWebLogin = async () => {
+  if (isLoggingIn.value) return;
+  
+  isLoggingIn.value = true;
+  token.value = '';
 
-  const apiBaseUrl = "https://as.hypergryph.com/user/oauth2/v2/grant";
-  const payload = {
-    type: 1,
-    appCode: "be36d44aa36bfb5b",
-    token: token.value
-  };
-
-  isTesting.value = true
-  const response = await fetch(apiBaseUrl, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': user_agent.value
-    },
-    body: JSON.stringify(payload)
-  })
-
-  if (!response.ok) {
-    isTesting.value = false
-    showToast("添加失败", "请确认 token 是否准确。");
-    return;
+  try {
+    const gotToken = await openLoginWindow();
+    
+    if (gotToken) {
+      console.log("获取到 Token，开始换取 UID...");
+      token.value = gotToken;
+      await processSave(gotToken);
+    } else {
+      console.log("用户取消了登录");
+    }
+  } catch (error) {
+    console.warn("发生错误", error);
+    toast.add({ title: "错误", description: "无法打开登录窗口" });
+  } finally {
+    isLoggingIn.value = false;
   }
+};
 
-  const data = await response.json()
-  getUID(data.data.token)
-}
+const handleManualAdd = async () => {
+  if (!token.value) return;
+  await processSave(token.value);
+};
 
-const getUID = async (app_token: string) => {
+const processSave = async (loginToken: string) => {
+  isProcessing.value = true;
+  try {
+    const oauthToken = await getOAuthToken(loginToken);
+    
+    if (!oauthToken) {
+      toast.add({ title: "授权失败", description: "无法换取 OAuth Token，请重试" });
+      return;
+    }
+
+    const uid = await fetchUidByToken(oauthToken);
+    
+    if (!uid) {
+      toast.add({ title: "识别失败", description: "无法获取 UID，Token 可能已失效" });
+      return;
+    }
+
+    const success = await addUser({ uid, token: loginToken });
+
+    if (success) {
+      toast.add({ title: "添加成功", description: `账号 ${uid} 已添加` });
+      isOpen.value = false; 
+      token.value = '';     
+      emit('success');
+    } else {
+      toast.add({ title: "保存失败", description: "写入配置文件出错" });
+    }
+
+  } catch (e) {
+    console.error(e);
+    toast.add({ title: "错误", description: "网络请求异常" });
+  } finally {
+    isProcessing.value = false;
+  }
+};
+
+const getOAuthToken = async (loginToken: string): Promise<string | null> => {
+  const url = "https://as.hypergryph.com/user/oauth2/v2/grant";
+  
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': user_agent.value
+      },
+      body: JSON.stringify({
+        token: loginToken,
+        appCode: "be36d44aa36bfb5b",
+        type: 1
+      })
+    });
+
+    if (!response.ok) {
+      console.error("Grant API error:", response.status);
+      return null;
+    }
+
+    const res = await response.json();
+    if (res.status === 0 && res.data && res.data.token) {
+      console.log("换取 OAuth Token 成功");
+      return res.data.token;
+    } else {
+      console.error("Grant API 返回错误:", res);
+      return null;
+    }
+  } catch (e) {
+    console.error("Grant API Exception:", e);
+    return null;
+  }
+};
+
+const fetchUidByToken = async (oauthToken: string): Promise<string | null> => {
   const apiBaseUrl = "https://binding-api-account-prod.hypergryph.com/account/binding/v1/binding_list";
   const query = new URLSearchParams({
-    token: app_token,
+    token: oauthToken,
     appCode: "endfield",
   });
 
-  const response = await fetch(`${apiBaseUrl}?${query.toString()}`, {
-    method: 'GET',
-    headers: {
-      'User-Agent': user_agent.value,
-    },
-  })
+  try {
+    const response = await fetch(`${apiBaseUrl}?${query.toString()}`, {
+      method: 'GET',
+      headers: { 
+        'User-Agent': user_agent.value 
+      },
+    });
 
-  if (!response.ok) {
-    isTesting.value = false
-    showToast("添加失败", "无法获取到绑定列表。");
-    return;
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    
+    if (data.status !== 0) {
+       console.error("获取 UID 失败:", data);
+       return null;
+    }
+
+    return data?.data?.list?.[0]?.bindingList?.[0]?.uid || null;
+  } catch (e) {
+    console.error("Fetch UID Error", e);
+    return null;
   }
-
-  const data = await response.json() as UserBindingsResponse
-  const uid = data.data.list[0]?.bindingList[0]?.uid
-  if (uid) saveAccount(uid)
-}
-
-const saveAccount = async (uid: string) => {
-  const newUser: User = {
-    uid: uid,
-    token: token.value
-  };
-
-  isTesting.value = true;
-  
-  const success = await addUser(newUser);
-
-  isTesting.value = false;
-
-  if (success) {
-    showToast("添加成功", "可以开始进行寻访记录分析力！");
-    emit('success');
-  } else {
-    showToast("添加失败", "无法保存至用户配置。");
-  }
-}
+};
 </script>

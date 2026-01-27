@@ -1,7 +1,9 @@
 use std::env;
 use std::fs;
 use std::path::PathBuf;
+use std::{thread, time::Duration};
 use tauri::command;
+use tauri::{AppHandle, Manager, WebviewWindowBuilder, WebviewUrl, Emitter, WindowEvent};
 
 fn get_userdata_dir() -> Result<PathBuf, String> {
     let exe_path = env::current_exe().map_err(|e| e.to_string())?;
@@ -45,6 +47,151 @@ fn load_full_record(uid: &str) -> Result<serde_json::Value, String> {
     }
 
     Ok(data)
+}
+
+#[tauri::command]
+async fn open_login_window(app: AppHandle) {
+    let label = "hg-login";
+    
+    if let Some(win) = app.get_webview_window(label) {
+        let _ = win.set_focus();
+        return;
+    }
+
+    let script = r#"
+      (function() {
+        var hasSent = false;
+        function sendToken(token) {
+            if (hasSent || !token) return;
+            console.log("捕获到 Token:", token);
+            hasSent = true;
+            // 🚀 核心修改：通过跳转 URL 传递 Token
+            // 这个地址是假的，Rust 会拦截它，不会真的跳过去
+            window.location.replace("http://tauri.localhost/login_success?token=" + token);
+        }
+
+        console.log("鹰角登录注入脚本启动...");
+
+        // --- 策略一：拦截 XHR ---
+        var originalOpen = XMLHttpRequest.prototype.open;
+        var originalSend = XMLHttpRequest.prototype.send;
+        XMLHttpRequest.prototype.open = function(method, url) {
+            this._url = url;
+            return originalOpen.apply(this, arguments);
+        };
+        XMLHttpRequest.prototype.send = function(body) {
+            this.addEventListener('load', function() {
+                try {
+                    if (this._url && this._url.includes('as.hypergryph.com/user/auth')) {
+                        var res = JSON.parse(this.responseText);
+                        if (res.status === 0 && res.data && res.data.token) {
+                            sendToken(res.data.token);
+                        }
+                    }
+                } catch (e) { }
+            });
+            return originalSend.apply(this, arguments);
+        };
+
+        // --- 策略二：拦截 Fetch ---
+        var originalFetch = window.fetch;
+        window.fetch = async function(...args) {
+            const response = await originalFetch(...args);
+            try {
+                const url = response.url;
+                if (url && url.includes('as.hypergryph.com/user/auth')) {
+                    const clone = response.clone();
+                    clone.json().then(data => {
+                        if (data.status === 0 && data.data && data.data.token) {
+                            sendToken(data.data.token);
+                        }
+                    }).catch(e => {});
+                }
+            } catch (e) {}
+            return response;
+        };
+
+        // --- 策略三：轮询 (带 Cookie) ---
+        var timer = setInterval(function() {
+            if (hasSent) { clearInterval(timer); return; }
+            fetch("https://web-api.hypergryph.com/account/info/hg", {
+                method: "GET",
+                credentials: "include"
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.code === 0 && data.data && data.data.content) {
+                    sendToken(data.data.content);
+                    clearInterval(timer);
+                }
+            })
+            .catch(e => {});
+        }, 1500);
+      })();
+    "#;
+
+    let app_handle_for_nav = app.clone();
+    let app_handle_for_event = app.clone();
+
+    let win_builder = WebviewWindowBuilder::new(
+        &app,
+        label,
+        WebviewUrl::External("https://user.hypergryph.com/".parse().unwrap())
+    )
+    .title("登录鹰角通行证")
+    .inner_size(500.0, 700.0)
+    .resizable(false)
+    .initialization_script(script)
+    .on_navigation(move |url| {
+        let url_str = url.as_str();
+        
+        if url_str.starts_with("http://tauri.localhost/login_success") {
+            println!("Rust 拦截到登录回调: {}", url_str);
+            
+            if let Some(query_start) = url_str.find("token=") {
+                let token = &url_str[query_start + 6..];
+                println!("解析 Token: {}", token);
+
+                let _ = app_handle_for_nav.emit("hg-login-success", token);
+                
+                let app_handle_clone = app_handle_for_nav.clone();
+                let label_clone = "hg-login".to_string();
+
+                thread::spawn(move || {
+                    thread::sleep(Duration::from_millis(500));
+                    
+                    if let Some(win) = app_handle_clone.get_webview_window(&label_clone) {
+                        let _ = win.close();
+                    }
+                });
+            }
+            return false;
+        }
+        
+        true
+    });
+
+    #[cfg(debug_assertions)]
+    let win_builder = win_builder.devtools(true);
+
+    match win_builder.build() {
+        Ok(win) => {
+            if let Err(e) = win.clear_all_browsing_data() {
+                eprintln!("清理 Cookie 失败: {}", e);
+            } else {
+                println!("已清理旧的登录 Cookie，准备新登录");
+            }
+
+            win.on_window_event(move |event| {
+                if let WindowEvent::Destroyed = event {
+                    let _ = app_handle_for_event.emit("hg-login-closed", ());
+                }
+            });
+        },
+        Err(e) => {
+            eprintln!("无法创建登录窗口: {}", e);
+        }
+    }
 }
 
 #[command]
@@ -131,7 +278,8 @@ pub fn run() {
             save_char_records,
             read_char_records,
             save_weapon_records,
-            read_weapon_records
+            read_weapon_records,
+            open_login_window
         ])
         .setup(|app| {
             if cfg!(debug_assertions) {
