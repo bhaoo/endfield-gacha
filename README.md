@@ -1,36 +1,49 @@
-<p align="center">
-    <img style="width: 150px;" src="./app-icon.png" />
-</p>
+<div align="center">
+  <img src="./app-icon.png" width="160" height="160" alt="Endfield Gacha Logo" />
 
-<h2 align="center">Endfield Gacha</h2>
+  <h1>Endfield Gacha</h1>
 
-<p align="center">
-“你好，咕咕嘎嘎！”<br/>
-一款适用于 Windows 客户端的寻访统计小工具
-</p>
+  <p>
+    <strong>“你好，咕咕嘎嘎！”</strong><br>
+    一个《明日方舟：终末地》寻访记录统计与分析工具
+  </p>
 
-<p align="center">
-    <img src="https://img.shields.io/github/license/bhaoo/endfield-gacha?style=flat-square" />
-    <img src="https://img.shields.io/github/v/release/bhaoo/endfield-gacha?style=flat-square" />
-    <img src="https://img.shields.io/github/last-commit/bhaoo/endfield-gacha/master?style=flat-square&label=update" />
-    <img src="https://img.shields.io/github/downloads/bhaoo/endfield-gacha/total?style=flat-square" />
-</p>
+  <p>
+    <a href="https://github.com/bhaoo/endfield-gacha/releases">
+      <img src="https://img.shields.io/github/v/release/bhaoo/endfield-gacha?style=flat-square&label=Release&color=%23383838&labelColor=%23fffa00" />
+    </a>
+    <img src="https://img.shields.io/github/downloads/bhaoo/endfield-gacha/total?style=flat-square&label=Downloads&color=%23383838&labelColor=%23fffa00" />
+    <img src="https://img.shields.io/github/last-commit/bhaoo/endfield-gacha/master?style=flat-square&color=%23383838&labelColor=%23fffa00" />
+    <img src="https://img.shields.io/github/license/bhaoo/endfield-gacha?style=flat-square&color=%23383838&labelColor=%23fffa00" />
+  </p>
+</div>
 
-## 预览
+---
 
-![Preview](preview.png)
+## 功能特性
 
-👆 看！这是个非酋！哈哈（更新：笑不出来了 T^T
+- **多账号支持**：支持多个账号的寻访记录统计分析；
+- **数据本地化**：所有数据保存于与应用程序同级目录下的 `/userData` 目录中。
 
-## 下载
+## 界面预览
 
-前往 [Releases](https://github.com/bhaoo/endfield-gacha/releases) 下载安装即可。
+<div align="center">
+    <img src="preview.png" alt="Preview" style="box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2), 0 6px 20px 0 rgba(0,0,0,0.19); border-radius: 8px;" />
+</div>
 
-## 介绍
+> 👆 **看！这是个非酋！** (更新：笑不出来了 T^T)
 
-数据会保存在与可运行程序同级目录下的 `/userData` 目录中，先已支持多账号，更多功能努力开发中 ❤ ！
+## 下载与安装
 
-同步可能时间会慢一些，因为 fetch 请求设置了一些延迟以防止触发 API 风控。
+本工具目前暂时仅支持 **Windows** 操作系统。
+
+1. 前往 [Releases](https://github.com/bhaoo/endfield-gacha/releases) 页面。
+2. 下载最新版本的 `Endfield_Gacha.exe`。
+3. 安装并运行即可（**不推荐放在系统盘**，可能会因为权限不足无法写入数据至 `/userData` 目录）。
+
+## 注意事项
+
+为了防止频繁请求触发 API 风控，同步过程中连续的请求之间会设置一定的延迟，因此若页数较多，拉取时间会稍长一些，请耐心等待 ❤。
 
 ## 最后
 
