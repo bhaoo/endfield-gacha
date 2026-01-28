@@ -44,7 +44,7 @@
           <p class="font-semibold mb-2 text-gray-500 text-xs">6★ 历史记录:</p>
 
           <div v-if="stat.history6.length > 0" class="flex flex-wrap gap-2">
-            <div v-for="(rec, idx) in stat.history6" :key="idx"
+            <div v-for="(rec, idx) in [...stat.history6].reverse()" :key="idx"
               class="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 flex items-center gap-1">
               <span class="font-medium text-gray-700 dark:text-gray-200">
                 {{ rec.name }}
