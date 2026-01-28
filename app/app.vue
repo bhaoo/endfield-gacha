@@ -14,17 +14,22 @@
             </UButton>
           </NuxtLink>
         </div>
-        <UPopover>
-          <UButton label="更多" color="neutral" variant="subtle" />
-          <template #content>
-            <UCard>
-              <p>Version 0.3.1</p>
-              <p>本工具为开源软件，源代码使用 MIT 协议授权</p>
-              <p>祝各位大佬欧气满满！如果可以的话，可以给我一个 Star ⭐ 嘛！</p>
-              <p>Github: <ULink @click="open('https://github.com/bhaoo/endfield-gacha')" class="text-primary">https://github.com/bhaoo/endfield-gacha</ULink></p>
-            </UCard>
-          </template>
-        </UPopover>
+        <div class="flex items-center gap-2">
+          <ColorMode />
+          <UPopover>
+            <UButton label="更多" color="neutral" variant="outline" />
+            <template #content>
+              <UCard>
+                <p>Version 0.3.1</p>
+                <p>本工具为开源软件，源代码使用 MIT 协议授权</p>
+                <p>祝各位大佬欧气满满！如果可以的话，可以给我一个 Star ⭐ 嘛！</p>
+                <p>Github: <ULink @click="open('https://github.com/bhaoo/endfield-gacha')" class="text-primary">
+                    https://github.com/bhaoo/endfield-gacha</ULink>
+                </p>
+              </UCard>
+            </template>
+          </UPopover>
+        </div>
       </div>
 
       <NuxtPage />
@@ -55,7 +60,7 @@ watch(uid, (newUid) => {
   if (newUid && newUid !== 'none') {
     loadAllData(newUid);
   } else {
-    charRecords.value = {}; 
+    charRecords.value = {};
     weaponRecords.value = {};
   }
 });

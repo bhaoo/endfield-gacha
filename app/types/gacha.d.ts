@@ -5,6 +5,7 @@ export interface User {
 
 export interface AppConfig {
   users: User[];
+  theme?: 'system' | 'light' | 'dark';
 }
 
 export interface HgApiResponse<T = any> {
