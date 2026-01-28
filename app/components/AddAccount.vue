@@ -57,6 +57,8 @@ import { fetch } from '@tauri-apps/plugin-http';
 
 const { addUser } = useUserStore();
 
+const currentUid = useState<string>('current-uid');
+
 const emit = defineEmits(['success']);
 const isOpen = ref(false);
 
@@ -124,6 +126,7 @@ const processSave = async (loginToken: string) => {
 
     if (success) {
       toast.add({ title: "添加成功", description: `账号 ${uid} 已添加` });
+      currentUid.value = uid;
       isOpen.value = false; 
       token.value = '';     
       emit('success');
