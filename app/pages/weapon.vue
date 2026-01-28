@@ -11,7 +11,7 @@
         <div class="flex justify-between items-center">
           <h3 class="text-lg font-bold">{{ stat.poolName }}</h3>
           <UBadge>
-            当前已攒: {{ stat.pityCount }} 抽
+            当前已垫: {{ stat.pityCount }} 抽
           </UBadge>
         </div>
       </template>
