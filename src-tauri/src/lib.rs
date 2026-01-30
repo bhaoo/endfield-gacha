@@ -50,10 +50,25 @@ fn load_full_record(uid: &str) -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
-async fn open_login_window(app: AppHandle) {
-    let label = "hg-login";
+async fn open_login_window(app: AppHandle, provider: Option<String>) {
+    let provider = provider.unwrap_or_else(|| "hypergryph".to_string());
+    let label = format!("hg-login-{}", provider);
+    let (login_url, auth_url_match, poll_url, title) = match provider.as_str() {
+        "gryphline" => (
+            "https://user.gryphline.com/",
+            "as.gryphline.com/user/auth",
+            "https://web-api.gryphline.com/cookie_store/account_token",
+            "登录鹰角通行证（国际服）",
+        ),
+        _ => (
+            "https://user.hypergryph.com/",
+            "as.hypergryph.com/user/auth",
+            "https://web-api.hypergryph.com/account/info/hg",
+            "登录鹰角通行证",
+        ),
+    };
     
-    if let Some(win) = app.get_webview_window(label) {
+    if let Some(win) = app.get_webview_window(&label) {
         let _ = win.set_focus();
         return;
     }
@@ -82,7 +97,7 @@ async fn open_login_window(app: AppHandle) {
         XMLHttpRequest.prototype.send = function(body) {
             this.addEventListener('load', function() {
                 try {
-                    if (this._url && this._url.includes('as.hypergryph.com/user/auth')) {
+                    if (this._url && this._url.includes('__AUTH_URL_MATCH__')) {
                         var res = JSON.parse(this.responseText);
                         if (res.status === 0 && res.data && res.data.token) {
                             sendToken(res.data.token);
@@ -99,7 +114,7 @@ async fn open_login_window(app: AppHandle) {
             const response = await originalFetch(...args);
             try {
                 const url = response.url;
-                if (url && url.includes('as.hypergryph.com/user/auth')) {
+                if (url && url.includes('__AUTH_URL_MATCH__')) {
                     const clone = response.clone();
                     clone.json().then(data => {
                         if (data.status === 0 && data.data && data.data.token) {
@@ -114,7 +129,7 @@ async fn open_login_window(app: AppHandle) {
         // --- 策略三：轮询 (带 Cookie) ---
         var timer = setInterval(function() {
             if (hasSent) { clearInterval(timer); return; }
-            fetch("https://web-api.hypergryph.com/account/info/hg", {
+            fetch("__POLL_URL__", {
                 method: "GET",
                 credentials: "include"
             })
@@ -129,16 +144,20 @@ async fn open_login_window(app: AppHandle) {
         }, 1500);
       })();
     "#;
+    let script = script
+        .replace("__AUTH_URL_MATCH__", auth_url_match)
+        .replace("__POLL_URL__", poll_url);
 
     let app_handle_for_nav = app.clone();
     let app_handle_for_event = app.clone();
+    let label_for_close = label.clone();
 
     let win_builder = WebviewWindowBuilder::new(
         &app,
-        label,
-        WebviewUrl::External("https://user.hypergryph.com/".parse().unwrap())
+        label.clone(),
+        WebviewUrl::External(login_url.parse().unwrap())
     )
-    .title("登录鹰角通行证")
+    .title(title)
     .inner_size(500.0, 700.0)
     .resizable(false)
     .initialization_script(script)
@@ -155,7 +174,7 @@ async fn open_login_window(app: AppHandle) {
                 let _ = app_handle_for_nav.emit("hg-login-success", token);
                 
                 let app_handle_clone = app_handle_for_nav.clone();
-                let label_clone = "hg-login".to_string();
+                let label_clone = label_for_close.clone();
 
                 thread::spawn(move || {
                     thread::sleep(Duration::from_millis(500));

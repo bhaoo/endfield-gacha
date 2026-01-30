@@ -3,11 +3,14 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen, type UnlistenFn } from '@tauri-apps/api/event';
 import { WebviewWindow } from '@tauri-apps/api/webviewWindow';
 
-export const openLoginWindow = () => {
+export type LoginProvider = 'hypergryph' | 'gryphline';
+
+export const openLoginWindow = (provider: LoginProvider = 'hypergryph') => {
   return new Promise<string | null>(async (resolve, reject) => {
     let unlistenSuccess: UnlistenFn | null = null;
     let unlistenClose: UnlistenFn | null = null;
     let isResolved = false;
+    const label = `hg-login-${provider}`;
 
     const cleanup = () => {
       if (unlistenSuccess) unlistenSuccess();
@@ -21,7 +24,7 @@ export const openLoginWindow = () => {
       isResolved = true;
 
       try {
-        const win = await WebviewWindow.getByLabel('hg-login');
+        const win = await WebviewWindow.getByLabel(label);
         if (win) await win.close();
       } catch (e) {}
       
@@ -43,7 +46,7 @@ export const openLoginWindow = () => {
     });
 
     try {
-      await invoke('open_login_window');
+      await invoke('open_login_window', { provider });
     } catch (err) {
       cleanup();
       reject(err);
