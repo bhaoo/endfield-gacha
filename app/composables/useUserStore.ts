@@ -4,7 +4,18 @@ import type { AppConfig, User } from "~/types/gacha";
 export const useUserStore = () => {
   const userList = useState<User[]>("global-user-list", () => []);
 
-  const uidList = computed(() => userList.value.map((u) => u.uid));
+  const getUserKey = (u: User) =>
+    u.key || (u.roleId?.roleId ? `${u.uid}_${u.roleId.roleId}` : u.uid);
+
+  const uidList = computed(() =>
+    userList.value.map((u) => ({
+      label:
+        u.roleId?.nickName && u.roleId?.roleId
+          ? `${u.roleId.nickName}(${u.roleId.roleId})`
+          : u.uid,
+      value: getUserKey(u),
+    })),
+  );
 
   const colorMode = useColorMode();
   const currentTheme = useState<"system" | "light" | "dark">(
@@ -15,7 +26,13 @@ export const useUserStore = () => {
   const loadConfig = async () => {
     try {
       const config = await invoke<AppConfig>("read_config");
-      userList.value = Array.isArray(config.users) ? config.users : [];
+      userList.value = Array.isArray(config.users)
+        ? config.users.map((u) => ({
+            ...u,
+            provider: u.provider || "hypergryph",
+            key: getUserKey(u),
+          }))
+        : [];
 
       const savedTheme = config.theme || "system";
       currentTheme.value = savedTheme;
@@ -51,15 +68,16 @@ export const useUserStore = () => {
     await saveConfig();
   };
 
-  const addUser = async (newUser: User) => {
-    const index = userList.value.findIndex((u) => u.uid === newUser.uid);
+  const addUser = async (newUser: User): Promise<boolean> => {
+    const normalized = { ...newUser, key: getUserKey(newUser) };
+    const index = userList.value.findIndex((u) => getUserKey(u) === normalized.key);
     if (index !== -1) {
-      userList.value[index] = newUser;
+      userList.value[index] = normalized;
     } else {
-      userList.value.push(newUser);
+      userList.value.push(normalized);
     }
 
-    await saveConfig();
+    return await saveConfig();
   };
 
   return {

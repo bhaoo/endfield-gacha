@@ -1,6 +1,16 @@
 export interface User {
+  key?: string;
   uid: string;
   token: string;
+  provider?: 'hypergryph' | 'gryphline';
+  roleId?: UserRole;
+}
+
+export interface UserRole {
+  serverId: string;
+  serverName: string;
+  nickName: string;
+  roleId: string;
 }
 
 export interface AppConfig {

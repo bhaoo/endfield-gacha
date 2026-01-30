@@ -15,6 +15,9 @@ export const useGachaSync = () => {
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.112 Safari/537.36",
   );
 
+  const getUserKey = (u: any) =>
+    u?.key || (u?.roleId?.roleId ? `${u.uid}_${u.roleId.roleId}` : u?.uid);
+
   const showToast = (title: string, desc: string) => {
     toast.add({
       title: title,
@@ -93,6 +96,7 @@ export const useGachaSync = () => {
   const fetchPaginatedData = async <T extends GachaItem>(
     u8_token: string,
     baseUrl: string,
+    serverId: string,
     extraParams: Record<string, string>,
   ): Promise<T[]> => {
     const allData: T[] = [];
@@ -104,7 +108,7 @@ export const useGachaSync = () => {
         const query = new URLSearchParams({
           lang: "zh-cn",
           token: u8_token,
-          server_id: "1",
+          server_id: serverId,
           ...extraParams,
         });
         if (nextSeqId) query.set("seq_id", nextSeqId);
@@ -134,14 +138,32 @@ export const useGachaSync = () => {
     return allData;
   };
 
-  const getAuthToken = async (uid: string) => {
+  const getEfServerId = (
+    provider: "hypergryph" | "gryphline",
+    role?: { serverId: string; serverName: string } | null,
+  ) => {
+    if (provider === "hypergryph") return "1";
+
+    const rawId = String(role?.serverId ?? "").trim();
+    // const rawName = String(role?.serverName ?? "").toLowerCase();
+
+    if (provider === "gryphline") return rawId;
+
+    return "1";
+  };
+
+  const getAuthToken = async (userKey: string) => {
     try {
       const config = await invoke<AppConfig>("read_config");
-      const targetUser = config.users?.find((u) => u.uid === uid);
+      const targetUser = config.users?.find((u) => getUserKey(u) === userKey);
       if (!targetUser?.token) return null;
 
+      const provider = targetUser.provider || "hypergryph";
+      const serverId = getEfServerId(provider, targetUser.roleId || null);
+      const uid = targetUser.uid;
+
       const authRes = await fetch(
-        "https://as.hypergryph.com/user/oauth2/v2/grant",
+        `https://as.${provider}.com/user/oauth2/v2/grant`,
         {
           method: "POST",
           headers: {
@@ -150,7 +172,7 @@ export const useGachaSync = () => {
           },
           body: JSON.stringify({
             type: 1,
-            appCode: "be36d44aa36bfb5b",
+            appCode: provider === "gryphline" ? "3dacefa138426cfe" : "be36d44aa36bfb5b",
             token: targetUser.token,
           }),
         },
@@ -159,7 +181,7 @@ export const useGachaSync = () => {
       const authData = await authRes.json();
 
       const u8Res = await fetch(
-        "https://binding-api-account-prod.hypergryph.com/account/binding/v1/u8_token_by_uid",
+        `https://binding-api-account-prod.${provider}.com/account/binding/v1/u8_token_by_uid`,
         {
           method: "POST",
           headers: {
@@ -171,33 +193,45 @@ export const useGachaSync = () => {
       );
       if (!u8Res.ok) return null;
       const u8Data = await u8Res.json();
-      return u8Data.data.token;
+      if (!u8Data?.data?.token) return null;
+      return { u8Token: u8Data.data.token as string, provider, serverId };
     } catch (e) {
       console.error("Auth error", e);
       return null;
     }
   };
 
-  const syncCharacters = async (uid: string, u8_token: string) => {
+  const syncCharacters = async (
+    uid: string,
+    u8_token: string,
+    provider: "hypergryph" | "gryphline",
+    serverId: string,
+  ) => {
     const fetched: Record<string, EndFieldCharInfo[]> = {};
     for (const poolType of POOL_TYPES) {
       fetched[poolType] = await fetchPaginatedData<EndFieldCharInfo>(
         u8_token,
-        "https://ef-webview.hypergryph.com/api/record/char",
+        `https://ef-webview.${provider}.com/api/record/char`,
+        serverId,
         { pool_type: poolType },
       );
     }
     return await saveUserData(uid, fetched, "char");
   };
 
-  const syncWeapons = async (uid: string, u8_token: string) => {
+  const syncWeapons = async (
+    uid: string,
+    u8_token: string,
+    provider: "hypergryph" | "gryphline",
+    serverId: string,
+  ) => {
     const query = new URLSearchParams({
       lang: "zh-cn",
       token: u8_token,
-      server_id: "1",
+      server_id: serverId,
     });
     const poolRes = await fetch(
-      `https://ef-webview.hypergryph.com/api/record/weapon/pool?${query.toString()}`,
+      `https://ef-webview.${provider}.com/api/record/weapon/pool?${query.toString()}`,
       {
         headers: { "User-Agent": user_agent.value },
       },
@@ -214,7 +248,8 @@ export const useGachaSync = () => {
       console.log(`正在同步武器池: ${pool.poolName}`);
       fetched[pool.poolId] = await fetchPaginatedData<EndFieldWeaponInfo>(
         u8_token,
-        "https://ef-webview.hypergryph.com/api/record/weapon",
+        `https://ef-webview.${provider}.com/api/record/weapon`,
+        serverId,
         { pool_id: pool.poolId },
       );
     }
@@ -230,14 +265,14 @@ export const useGachaSync = () => {
     );
 
     try {
-      const token = await getAuthToken(uid);
-      if (!token) throw new Error("Token 获取失败，请重新登录");
+      const auth = await getAuthToken(uid);
+      if (!auth) throw new Error("Token 获取失败，请重新登录");
 
       let count = 0;
       if (type === "char") {
-        count = await syncCharacters(uid, token);
+        count = await syncCharacters(uid, auth.u8Token, auth.provider, auth.serverId);
       } else {
-        count = await syncWeapons(uid, token);
+        count = await syncWeapons(uid, auth.u8Token, auth.provider, auth.serverId);
       }
 
       await loadUserData(uid, type);

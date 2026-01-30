@@ -11,7 +11,7 @@ onMounted(() => {
   if (uidList.value.length === 0) {
     loadConfig().then(() => {
       if ((!uid.value || uid.value === 'none') && uidList.value.length > 0) {
-        uid.value = uidList.value[0];
+        uid.value = uidList.value[0]!.value;
       }
     });
   }

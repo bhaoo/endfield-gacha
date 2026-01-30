@@ -39,6 +39,7 @@ import { openUrl } from '@tauri-apps/plugin-opener';
 import { fetch } from '@tauri-apps/plugin-http';
 import type { TabsItem } from '@nuxt/ui';
 import type { LoginProvider } from '~/composables/useLogin';
+import type { UserBindingsResponse, UserRole } from '~/types/gacha';
 
 const { addUser } = useUserStore();
 
@@ -49,12 +50,12 @@ const serverItems: TabsItem[] = [
   {
     label: '官服',
     icon: 'i-lucide-house',
-    slot: 'account'
+    slot: 'hypergryph'
   },
   {
-    label: '国际服（亚服）',
+    label: '国际服',
     icon: 'i-lucide-globe',
-    slot: 'password'
+    slot: 'gryphline'
   }
 ]
 const serverValue = ref('0');
@@ -128,18 +129,42 @@ const processSave = async (loginToken: string) => {
       return;
     }
 
-    const uid = await fetchUidByToken(oauthToken);
+    const bindings = await fetchUidByToken(oauthToken);
 
-    if (!uid) {
-      toast.add({ title: "识别失败", description: "无法获取 UID，Token 可能已失效" });
+    if (!bindings || bindings.length === 0) {
+      toast.add({ title: "识别失败", description: "无法获取 UID/角色信息，Token 可能已失效" });
       return;
     }
 
-    const success = await addUser({ uid, token: loginToken });
+    const usersToAdd = bindings.flatMap(({ uid, roles }) => {
+      if (!roles || roles.length === 0) {
+        return [{
+          key: buildUserKey(uid, null),
+          uid,
+          token: loginToken,
+          provider: loginProvider.value,
+        }];
+      }
 
-    if (success) {
-      toast.add({ title: "添加成功", description: `账号 ${uid} 已添加` });
-      currentUid.value = uid;
+      return roles.map((role) => ({
+        key: buildUserKey(uid, role),
+        uid,
+        token: loginToken,
+        provider: loginProvider.value,
+        roleId: role
+      }));
+    });
+
+    let okCount = 0;
+    for (const u of usersToAdd) {
+      const success = await addUser(u);
+      if (success) okCount += 1;
+    }
+
+    if (okCount > 0) {
+      toast.add({ title: "添加成功", description: `已添加 ${okCount} 个角色` });
+      const first = usersToAdd[0];
+      currentUid.value = (first?.key || first?.uid) as string;
       isOpen.value = false;
       token.value = '';
       emit('success');
@@ -193,7 +218,17 @@ const getOAuthToken = async (loginToken: string): Promise<string | null> => {
   }
 };
 
-const fetchUidByToken = async (oauthToken: string): Promise<string | null> => {
+const normalizeRole = (role: any): UserRole => ({
+  serverId: String(role?.serverId ?? ''),
+  serverName: String(role?.serverName ?? ''),
+  nickName: String(role?.nickName ?? ''),
+  roleId: String(role?.roleId ?? ''),
+});
+
+const buildUserKey = (uid: string, role: UserRole | null) =>
+  role?.roleId ? `${uid}_${role.roleId}` : uid;
+
+const fetchUidByToken = async (oauthToken: string): Promise<{ uid: string; roles: UserRole[] }[] | null> => {
   const apiBaseUrl = `https://binding-api-account-prod.${loginProvider.value}.com/account/binding/v1/binding_list`;
   const query = new URLSearchParams({
     token: oauthToken,
@@ -210,14 +245,26 @@ const fetchUidByToken = async (oauthToken: string): Promise<string | null> => {
 
     if (!response.ok) return null;
 
-    const data = await response.json();
+    const data = await response.json() as UserBindingsResponse;
 
     if (data.status !== 0) {
       console.error("获取 UID 失败:", data);
       return null;
     }
 
-    return data?.data?.list?.[0]?.bindingList?.[0]?.uid || null;
+    const appInfo = data?.data?.list?.find((x) => x.appCode === 'endfield') || data?.data?.list?.[0];
+    const bindings = appInfo?.bindingList || [];
+
+    const result: { uid: string; roles: UserRole[] }[] = [];
+    for (const binding of bindings) {
+      const uid = binding?.uid || '';
+      if (!uid) continue;
+
+      const roles = Array.isArray(binding?.roles) ? binding.roles.map(normalizeRole) : [];
+      result.push({ uid, roles });
+    }
+
+    return result.length > 0 ? result : null;
   } catch (e) {
     console.error("Fetch UID Error", e);
     return null;
