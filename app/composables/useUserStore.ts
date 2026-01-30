@@ -8,13 +8,18 @@ export const useUserStore = () => {
     u.key || (u.roleId?.roleId ? `${u.uid}_${u.roleId.roleId}` : u.uid);
 
   const uidList = computed(() =>
-    userList.value.map((u) => ({
-      label:
-        u.roleId?.nickName && u.roleId?.roleId
-          ? `${u.roleId.nickName}(${u.roleId.roleId})`
-          : u.uid,
-      value: getUserKey(u),
-    })),
+    [
+      { label: "system", value: "system" },
+      ...userList.value
+        .map((u) => ({
+          label:
+            u.roleId?.nickName && u.roleId?.roleId
+              ? `${u.roleId.nickName}(${u.roleId.roleId})`
+              : u.uid,
+          value: getUserKey(u),
+        }))
+        .filter((item) => item.value !== "system"),
+    ],
   );
 
   const colorMode = useColorMode();

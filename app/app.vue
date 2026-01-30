@@ -45,7 +45,7 @@ const { charRecords, weaponRecords, isSyncing, handleSync, loadCharData, loadWea
 
 const { loadConfig } = useUserStore();
 const route = useRoute()
-const uid = useState<string>('current-uid', () => 'none')
+const uid = useState<string>('current-uid', () => 'system')
 const gachaType = computed(() => {
   return route.path === '/' ? 'char' : 'weapon'
 })

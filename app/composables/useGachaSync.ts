@@ -1,19 +1,77 @@
 import { fetch } from "@tauri-apps/plugin-http";
 import { invoke } from "@tauri-apps/api/core";
+import { readTextFile, BaseDirectory } from '@tauri-apps/plugin-fs';
 import type {
   AppConfig,
   EndFieldCharInfo,
   EndFieldWeaponInfo,
   GachaItem,
 } from "~/types/gacha";
-import { analyzePoolData, delay, POOL_TYPES } from "~/utils/gachaCalc";
+import {
+  analyzePoolData,
+  analyzeWeaponPoolData,
+  delay,
+  POOL_TYPES,
+  parseGachaParams,
+} from "~/utils/gachaCalc";
 
 export const useGachaSync = () => {
   const toast = useToast();
   const isSyncing = ref(false);
+  const SYSTEM_UID = "system";
   const user_agent = ref(
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.112 Safari/537.36",
   );
+
+  const getGachaUri = async () => {
+    const logPath =
+      "AppData/LocalLow/Hypergryph/Endfield/sdklogs/HGWebview.log";
+    const targetPrefix = "https://ef-webview.hypergryph.com/page/gacha_char";
+    try {
+      const content = await readTextFile(logPath, {
+        baseDir: BaseDirectory.Home,
+      });
+      const lines = content.split(/\r?\n/).reverse();
+      const matchLine = lines.find((line) => line.includes(targetPrefix));
+
+      if (matchLine) {
+        const urlRegex =
+          /(https:\/\/ef-webview\.hypergryph\.com\/page\/gacha_char[^\s]*)/;
+        const result = matchLine.match(urlRegex);
+        return result?.[1] || "";
+      }
+      return "";
+    } catch (err) {
+      console.error("日志读取失败:", err);
+      return "";
+    }
+  };
+
+  type GachaAuth = {
+    u8Token: string;
+    provider: "hypergryph" | "gryphline";
+    serverId: string;
+  };
+
+  const getSystemAuthFromLog = async (): Promise<GachaAuth> => {
+    const uri = await getGachaUri();
+    if (!uri) {
+      throw new Error(
+        "未在日志中找到抽卡链接哦~请先在游戏内打开一次抽卡记录页面（角色池即可），再进行同步~",
+      );
+    }
+
+    const params = parseGachaParams(uri);
+    if (!params?.u8_token) {
+      throw new Error("抽卡链接参数解析失败：未找到 u8_token");
+    }
+
+    return {
+      u8Token: params.u8_token,
+      provider: "hypergryph",
+      serverId: "1",
+    };
+  };
 
   const getUserKey = (u: any) =>
     u?.key || (u?.roleId?.roleId ? `${u.uid}_${u.roleId.roleId}` : u?.uid);
@@ -152,7 +210,7 @@ export const useGachaSync = () => {
     return "1";
   };
 
-  const getAuthToken = async (userKey: string) => {
+  const getAuthToken = async (userKey: string): Promise<GachaAuth | null> => {
     try {
       const config = await invoke<AppConfig>("read_config");
       const targetUser = config.users?.find((u) => getUserKey(u) === userKey);
@@ -258,6 +316,11 @@ export const useGachaSync = () => {
 
   const handleSync = async (uid: string, type: "char" | "weapon" = "char") => {
     if (isSyncing.value) return;
+    if (!uid || uid === "none") {
+      showToast("同步失败", "请先选择一个账号");
+      return;
+    }
+
     isSyncing.value = true;
     showToast(
       "同步开始",
@@ -265,7 +328,10 @@ export const useGachaSync = () => {
     );
 
     try {
-      const auth = await getAuthToken(uid);
+      const auth =
+        uid === SYSTEM_UID
+          ? await getSystemAuthFromLog()
+          : await getAuthToken(uid);
       if (!auth) throw new Error("Token 获取失败，请重新登录");
 
       let count = 0;

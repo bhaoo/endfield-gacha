@@ -8,7 +8,8 @@ const uid = defineModel<string>({ required: true });
 const { uidList, loadConfig } = useUserStore();
 
 onMounted(() => {
-  if (uidList.value.length === 0) {
+  // uidList 至少包含 system
+  if (uidList.value.length <= 1) {
     loadConfig().then(() => {
       if ((!uid.value || uid.value === 'none') && uidList.value.length > 0) {
         uid.value = uidList.value[0]!.value;

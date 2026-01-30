@@ -109,3 +109,14 @@ export interface GachaStatistics {
   count4: number;
   history6: HistoryRecord[]; 
 }
+
+export interface EndfieldGachaParams {
+  pool_id: string;
+  u8_token: string;
+  platform: string;
+  channel: string;
+  subChannel: string;
+  lang: string;
+  server: string;
+  [key: string]: string | undefined;
+}
