@@ -1,9 +1,9 @@
 [package]
-name = "app"
-version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
-license = ""
+name = "Endfield_Gacha"
+version = "0.4.1"
+description = "A tool for tracking statistics and analyzing recruitment (gacha) records in Arknights: Endfield."
+authors = ["Bhao"]
+license = "MIT"
 repository = ""
 edition = "2021"
 rust-version = "1.77.2"
