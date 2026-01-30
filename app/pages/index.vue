@@ -66,6 +66,12 @@
     </UCard>
   </div>
 
+  <div v-else-if="uid === 'system' && statistics.length <= 0" class="text-center text-gray-500 py-16">
+    <div class="mb-2 text-4xl">👋</div>
+    <p class="text-lg font-medium mt-5">欢迎使用 Endfield Gacha !</p>
+    <p class="text-sm mt-3">当前选择的账号为 <b>system</b> ，即从日志中获取寻访记录数据。</p>
+    <p class="text-sm mt-1">目前仅国服（官服 / Bilibili 渠道服）支持从日志中获取，官服以及国际服推荐点击左上角添加账号使用哦~</p>
+  </div>
   <div v-else class="text-center text-gray-500 py-10">
     暂无角色数据，请点击“同步最新数据”获取。
   </div>
