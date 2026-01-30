@@ -284,7 +284,6 @@ fn read_weapon_records(uid: String) -> Result<serde_json::Value, String> {
     Ok(weapon_data)
 }
 
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()

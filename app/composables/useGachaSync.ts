@@ -14,14 +14,21 @@ import {
   POOL_TYPES,
   parseGachaParams,
 } from "~/utils/gachaCalc";
+import {
+  inferSystemChannel,
+  isSystemUid,
+  systemUidFromChannel,
+  systemUidLabel,
+  SYSTEM_UID_AUTO,
+} from "~/utils/systemAccount";
 
 export const useGachaSync = () => {
   const toast = useToast();
   const isSyncing = ref(false);
-  const SYSTEM_UID = "system";
   const user_agent = ref(
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.112 Safari/537.36",
   );
+  const currentUid = useState<string>("current-uid", () => SYSTEM_UID_AUTO);
 
   const getGachaUri = async () => {
     const logPath =
@@ -53,7 +60,13 @@ export const useGachaSync = () => {
     serverId: string;
   };
 
-  const getSystemAuthFromLog = async (): Promise<GachaAuth> => {
+  type SystemGachaAuth = GachaAuth & {
+    channel?: string;
+    subChannel?: string;
+    inferredUid: string;
+  };
+
+  const getSystemAuthFromLog = async (): Promise<SystemGachaAuth> => {
     const uri = await getGachaUri();
     if (!uri) {
       throw new Error(
@@ -66,10 +79,18 @@ export const useGachaSync = () => {
       throw new Error("抽卡链接参数解析失败：未找到 u8_token");
     }
 
+    const channelType = inferSystemChannel({
+      channel: params.channel,
+      subChannel: params.subChannel,
+    });
+
     return {
       u8Token: params.u8_token,
       provider: "hypergryph",
       serverId: "1",
+      channel: params.channel,
+      subChannel: params.subChannel,
+      inferredUid: systemUidFromChannel(channelType),
     };
   };
 
@@ -328,20 +349,51 @@ export const useGachaSync = () => {
     );
 
     try {
-      const auth =
-        uid === SYSTEM_UID
-          ? await getSystemAuthFromLog()
-          : await getAuthToken(uid);
+      let effectiveUid = uid;
+      let auth: GachaAuth | null = null;
+
+      if (isSystemUid(uid)) {
+        const systemAuth = await getSystemAuthFromLog();
+
+        if (uid === SYSTEM_UID_AUTO) {
+          effectiveUid = systemAuth.inferredUid || SYSTEM_UID_AUTO;
+          if (effectiveUid !== uid) {
+            currentUid.value = effectiveUid;
+            showToast(
+              "已自动识别服务器渠道",
+              `已切换为 ${systemUidLabel(effectiveUid)}`,
+            );
+          }
+        } else if (systemAuth.inferredUid && systemAuth.inferredUid !== uid) {
+          throw new Error(
+            `当前日志识别为 ${systemUidLabel(systemAuth.inferredUid)}，但你选择的是 ${systemUidLabel(uid)}。请切换账号选择，或在对应客户端内打开一次抽卡记录页后再同步哦。`,
+          );
+        }
+
+        auth = systemAuth;
+      } else {
+        auth = await getAuthToken(uid);
+      }
       if (!auth) throw new Error("Token 获取失败，请重新登录");
 
       let count = 0;
       if (type === "char") {
-        count = await syncCharacters(uid, auth.u8Token, auth.provider, auth.serverId);
+        count = await syncCharacters(
+          effectiveUid,
+          auth.u8Token,
+          auth.provider,
+          auth.serverId,
+        );
       } else {
-        count = await syncWeapons(uid, auth.u8Token, auth.provider, auth.serverId);
+        count = await syncWeapons(
+          effectiveUid,
+          auth.u8Token,
+          auth.provider,
+          auth.serverId,
+        );
       }
 
-      await loadUserData(uid, type);
+      await loadUserData(effectiveUid, type);
 
       if (count > 0) showToast("同步成功", `新增 ${count} 条寻访记录！`);
       else showToast("同步成功", "已经是最新的啦！如果是刚抽的话可能有延迟哦~");

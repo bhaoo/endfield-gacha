@@ -1,5 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { AppConfig, User } from "~/types/gacha";
+import {
+  isSystemUid,
+  systemUidLabel,
+  SYSTEM_UID_AUTO,
+  SYSTEM_UID_BILIBILI,
+  SYSTEM_UID_OFFICIAL,
+} from "~/utils/systemAccount";
 
 export const useUserStore = () => {
   const userList = useState<User[]>("global-user-list", () => []);
@@ -9,7 +16,9 @@ export const useUserStore = () => {
 
   const uidList = computed(() =>
     [
-      { label: "system", value: "system" },
+      { label: systemUidLabel(SYSTEM_UID_AUTO), value: SYSTEM_UID_AUTO },
+      { label: systemUidLabel(SYSTEM_UID_OFFICIAL), value: SYSTEM_UID_OFFICIAL },
+      { label: systemUidLabel(SYSTEM_UID_BILIBILI), value: SYSTEM_UID_BILIBILI },
       ...userList.value
         .map((u) => ({
           label:
@@ -18,7 +27,7 @@ export const useUserStore = () => {
               : u.uid,
           value: getUserKey(u),
         }))
-        .filter((item) => item.value !== "system"),
+        .filter((item) => !isSystemUid(item.value)),
     ],
   );
 

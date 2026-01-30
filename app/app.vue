@@ -40,12 +40,13 @@
 
 <script lang="ts" setup>
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { SYSTEM_UID_AUTO } from '~/utils/systemAccount'
 
 const { charRecords, weaponRecords, isSyncing, handleSync, loadCharData, loadWeaponData } = useGachaSync();
 
 const { loadConfig } = useUserStore();
 const route = useRoute()
-const uid = useState<string>('current-uid', () => 'system')
+const uid = useState<string>('current-uid', () => SYSTEM_UID_AUTO)
 const gachaType = computed(() => {
   return route.path === '/' ? 'char' : 'weapon'
 })
