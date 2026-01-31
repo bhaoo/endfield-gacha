@@ -12,6 +12,7 @@ import {
   analyzeWeaponPoolData,
   delay,
   POOL_TYPES,
+  POOL_NAME_MAP,
   parseGachaParams,
 } from "~/utils/gachaCalc";
 import {
@@ -25,6 +26,16 @@ import {
 export const useGachaSync = () => {
   const toast = useToast();
   const isSyncing = ref(false);
+  type SyncProgress = {
+    type: "char" | "weapon" | null;
+    poolName: string;
+    page: number;
+  };
+  const syncProgress = useState<SyncProgress>("gacha-sync-progress", () => ({
+    type: null,
+    poolName: "",
+    page: 0,
+  }));
   const user_agent = ref(
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.112 Safari/537.36",
   );
@@ -177,13 +188,24 @@ export const useGachaSync = () => {
     baseUrl: string,
     serverId: string,
     extraParams: Record<string, string>,
+    progress?: { type: "char" | "weapon"; poolName: string },
   ): Promise<T[]> => {
     const allData: T[] = [];
     let nextSeqId = "";
     let hasMore = true;
+    let page = 0;
 
     try {
       while (hasMore) {
+        page++;
+        if (progress) {
+          syncProgress.value = {
+            type: progress.type,
+            poolName: progress.poolName,
+            page,
+          };
+        }
+
         const query = new URLSearchParams({
           lang: "zh-cn",
           token: u8_token,
@@ -288,11 +310,13 @@ export const useGachaSync = () => {
   ) => {
     const fetched: Record<string, EndFieldCharInfo[]> = {};
     for (const poolType of POOL_TYPES) {
+      const poolName = POOL_NAME_MAP[poolType] || poolType;
       fetched[poolType] = await fetchPaginatedData<EndFieldCharInfo>(
         u8_token,
         `https://ef-webview.${provider}.com/api/record/char`,
         serverId,
         { pool_type: poolType },
+        { type: "char", poolName },
       );
     }
     return await saveUserData(uid, fetched, "char");
@@ -304,6 +328,7 @@ export const useGachaSync = () => {
     provider: "hypergryph" | "gryphline",
     serverId: string,
   ) => {
+    syncProgress.value = { type: "weapon", poolName: "获取武器池列表", page: 1 };
     const query = new URLSearchParams({
       lang: "zh-cn",
       token: u8_token,
@@ -330,6 +355,7 @@ export const useGachaSync = () => {
         `https://ef-webview.${provider}.com/api/record/weapon`,
         serverId,
         { pool_id: pool.poolId },
+        { type: "weapon", poolName: pool.poolName || pool.poolId },
       );
     }
     return await saveUserData(uid, fetched, "weapon");
@@ -343,6 +369,7 @@ export const useGachaSync = () => {
     }
 
     isSyncing.value = true;
+    syncProgress.value = { type, poolName: "", page: 0 };
     showToast(
       "同步开始",
       `正在获取${type === "char" ? "干员" : "武器"}数据...`,
@@ -402,6 +429,7 @@ export const useGachaSync = () => {
       console.error(err);
     } finally {
       isSyncing.value = false;
+      syncProgress.value = { type: null, poolName: "", page: 0 };
     }
   };
 
@@ -425,6 +453,7 @@ export const useGachaSync = () => {
     charStatistics,
     weaponStatistics,
     isSyncing,
+    syncProgress,
     handleSync,
     loadCharData: (uid: string) => loadUserData(uid, "char"),
     loadWeaponData: (uid: string) => loadUserData(uid, "weapon"),

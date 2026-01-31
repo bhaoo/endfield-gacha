@@ -7,7 +7,7 @@ export const POOL_TYPES = [
 ] as const;
 
 export const POOL_NAME_MAP: Record<string, string> = {
-  "E_CharacterGachaPoolType_Special": "限定寻访",
+  "E_CharacterGachaPoolType_Special": "特许寻访",
   "E_CharacterGachaPoolType_Standard": "基础寻访",
   "E_CharacterGachaPoolType_Beginner": "启程寻访"
 };
@@ -36,7 +36,7 @@ export const analyzePoolData = (poolKey: string, rawData: EndFieldCharInfo[]): G
   let count5 = 0;
   let count4 = 0;
   let pullsSinceLast6 = 0;
-  
+
   const shouldCountForPity = (item: EndFieldCharInfo) => {
     if (poolKey === "E_CharacterGachaPoolType_Special" && item.isFree) return false;
     return true;

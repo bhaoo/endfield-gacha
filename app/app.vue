@@ -13,6 +13,10 @@
               {{ route.path === '/' ? '切换至武器池' : '切换至角色池' }}
             </UButton>
           </NuxtLink>
+          <USeparator v-if="isSyncing && syncProgress.poolName" orientation="vertical" class="h-6 mx-2" />
+          <UBadge v-if="isSyncing && syncProgress.poolName" color="neutral" variant="outline">
+            正在获取：{{ syncProgress.poolName }} · 第 {{ syncProgress.page }} 页
+          </UBadge>
         </div>
         <div class="flex items-center gap-2">
           <ColorMode />
@@ -42,7 +46,7 @@
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { SYSTEM_UID_AUTO } from '~/utils/systemAccount'
 
-const { charRecords, weaponRecords, isSyncing, handleSync, loadCharData, loadWeaponData } = useGachaSync();
+const { charRecords, weaponRecords, isSyncing, syncProgress, handleSync, loadCharData, loadWeaponData } = useGachaSync();
 
 const { loadConfig } = useUserStore();
 const route = useRoute()
