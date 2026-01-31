@@ -37,10 +37,15 @@ export const analyzePoolData = (poolKey: string, rawData: EndFieldCharInfo[]): G
   let count4 = 0;
   let pullsSinceLast6 = 0;
   
+  const shouldCountForPity = (item: EndFieldCharInfo) => {
+    if (poolKey === "E_CharacterGachaPoolType_Special" && item.isFree) return false;
+    return true;
+  };
+  
   const historyRecords: HistoryRecord[] = []; 
 
   for (const item of data) {
-    pullsSinceLast6++;
+    if (shouldCountForPity(item)) pullsSinceLast6++;
     
     if (item.rarity === 6) {
       count6++;
