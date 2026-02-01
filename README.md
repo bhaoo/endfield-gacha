@@ -69,7 +69,7 @@
    - 官服 → 保存到 `system_official.json`
    - B 服 → 保存到 `system_bilibili.json`
 
-### 添加账号同步（B 服不可用）
+### 添加账号同步
 
 左上角“添加账号”支持两种方式：
 
@@ -77,6 +77,11 @@
 - **手动粘贴 Token**
 
 添加成功后，可在账号下拉选择对应角色进行同步与查看。
+
+> [!CAUTION]
+> Bilibili 渠道服 ⚠ 注意
+>
+> 使用 `添加账号同步` 前，请先前往鹰角网络用户中心 [角色绑定](https://user.hypergryph.com/bindCharacters?game=endfield) 处绑定 Bilibili 服帐号哦~
 
 ## 注意事项
 
