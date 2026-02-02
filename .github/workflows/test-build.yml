@@ -14,12 +14,16 @@ jobs:
         include:
           - platform: 'macos-latest'
             args: '--target aarch64-apple-darwin'
+            arch: 'macos-arm64'
           - platform: 'macos-latest'
             args: '--target x86_64-apple-darwin'
+            arch: 'macos-intel'
           - platform: 'ubuntu-22.04'
+            arch: 'ubuntu-deb'
             args: ''
           - platform: 'windows-latest'
             args: ''
+            arch: 'windows-exe'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -52,3 +56,15 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           args: ${{ matrix.args }}
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-test-build-${{ matrix.arch }} 
+          retention-days: 1
+          path: |
+            src-tauri/target/**/release/bundle/dmg/*.dmg
+            src-tauri/target/**/release/bundle/macos/*.app
+            src-tauri/target/**/release/bundle/nsis/*.exe
+            src-tauri/target/**/release/bundle/deb/*.deb
+            src-tauri/target/**/release/bundle/appimage/*.AppImage
