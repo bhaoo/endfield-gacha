@@ -284,6 +284,11 @@ fn read_weapon_records(uid: String) -> Result<serde_json::Value, String> {
     Ok(weapon_data)
 }
 
+#[command]
+fn get_os() -> String {
+    std::env::consts::OS.to_string()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -297,6 +302,7 @@ pub fn run() {
             read_char_records,
             save_weapon_records,
             read_weapon_records,
+            get_os,
             open_login_window
         ])
         .setup(|app| {

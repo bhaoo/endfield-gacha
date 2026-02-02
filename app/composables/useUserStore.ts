@@ -10,15 +10,26 @@ import {
 
 export const useUserStore = () => {
   const userList = useState<User[]>("global-user-list", () => []);
+  const { isWindows } = usePlatform();
 
   const getUserKey = (u: User) =>
     u.key || (u.roleId?.roleId ? `${u.uid}_${u.roleId.roleId}` : u.uid);
 
   const uidList = computed(() =>
     [
-      { label: systemUidLabel(SYSTEM_UID_AUTO), value: SYSTEM_UID_AUTO },
-      { label: systemUidLabel(SYSTEM_UID_OFFICIAL), value: SYSTEM_UID_OFFICIAL },
-      { label: systemUidLabel(SYSTEM_UID_BILIBILI), value: SYSTEM_UID_BILIBILI },
+      ...(isWindows.value
+        ? [
+            { label: systemUidLabel(SYSTEM_UID_AUTO), value: SYSTEM_UID_AUTO },
+            {
+              label: systemUidLabel(SYSTEM_UID_OFFICIAL),
+              value: SYSTEM_UID_OFFICIAL,
+            },
+            {
+              label: systemUidLabel(SYSTEM_UID_BILIBILI),
+              value: SYSTEM_UID_BILIBILI,
+            },
+          ]
+        : []),
       ...userList.value
         .map((u) => ({
           label:
@@ -39,6 +50,7 @@ export const useUserStore = () => {
 
   const loadConfig = async () => {
     try {
+      await usePlatform().detect();
       const config = await invoke<AppConfig>("read_config");
       userList.value = Array.isArray(config.users)
         ? config.users.map((u) => ({

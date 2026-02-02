@@ -44,13 +44,14 @@
 
 <script lang="ts" setup>
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { SYSTEM_UID_AUTO } from '~/utils/systemAccount'
+import { isSystemUid } from '~/utils/systemAccount'
 
 const { charRecords, weaponRecords, isSyncing, syncProgress, handleSync, loadCharData, loadWeaponData } = useGachaSync();
 
 const { loadConfig } = useUserStore();
+const { isWindows, detect: detectPlatform } = usePlatform();
 const route = useRoute()
-const uid = useState<string>('current-uid', () => SYSTEM_UID_AUTO)
+const uid = useState<string>('current-uid', () => 'none')
 const gachaType = computed(() => {
   return route.path === '/' ? 'char' : 'weapon'
 })
@@ -70,8 +71,15 @@ watch(uid, (newUid) => {
   }
 });
 
-onMounted(() => {
-  loadConfig();
+onMounted(async () => {
+  await detectPlatform();
+  await loadConfig();
+
+  if (!isWindows.value && isSystemUid(uid.value)) {
+    uid.value = 'none';
+    return;
+  }
+
   if (uid.value && uid.value !== 'none') {
     loadAllData(uid.value);
   }

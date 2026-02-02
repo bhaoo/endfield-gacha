@@ -26,6 +26,7 @@ import {
 export const useGachaSync = () => {
   const toast = useToast();
   const isSyncing = ref(false);
+  const { isWindows, detect: detectPlatform } = usePlatform();
   type SyncProgress = {
     type: "char" | "weapon" | null;
     poolName: string;
@@ -39,9 +40,11 @@ export const useGachaSync = () => {
   const user_agent = ref(
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.112 Safari/537.36",
   );
-  const currentUid = useState<string>("current-uid", () => SYSTEM_UID_AUTO);
+  const currentUid = useState<string>("current-uid", () => "none");
 
   const getGachaUri = async () => {
+    await detectPlatform();
+    if (!isWindows.value) return "";
     const logPath =
       "AppData/LocalLow/Hypergryph/Endfield/sdklogs/HGWebview.log";
     const targetPrefix = "https://ef-webview.hypergryph.com/page/gacha_char";
@@ -365,6 +368,15 @@ export const useGachaSync = () => {
     if (isSyncing.value) return;
     if (!uid || uid === "none") {
       showToast("同步失败", "请先选择一个账号");
+      return;
+    }
+
+    await detectPlatform();
+    if (isSystemUid(uid) && !isWindows.value) {
+      showToast(
+        "同步失败",
+        "system 账号仅支持 Windows。请通过“添加账号”方式登录后同步。",
+      );
       return;
     }
 
