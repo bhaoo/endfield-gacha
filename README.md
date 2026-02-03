@@ -5,7 +5,8 @@
 
   <p>
     <strong>“你好，咕咕嘎嘎！”</strong><br>
-    一个《明日方舟：终末地》寻访记录统计与分析工具
+    一个《明日方舟：终末地》寻访记录统计与分析工具<br>
+    支持 Windows / macOS
   </p>
 
   <p>
@@ -53,15 +54,23 @@
 
 ## 下载与安装
 
-本工具目前仅支持 **Windows 操作系统**。
+本工具支持 **Windows / macOS** ，**Linux** 很快就来~
 
 1. 前往 [Releases](https://github.com/bhaoo/endfield-gacha/releases) 页面。
-2. 下载最新版本的 `Endfield_Gacha.exe`。
-3. 运行即可（**不建议放在系统盘**，可能因为权限不足无法写入 `userData/`）。
+2. 下载最新版本中与你系统对应的安装包（Windows / macOS / Linux）。
+   - Windows 可以直接下载便携版（Endfield_Gacha_Portable.exe）
+4. 运行即可（请确保应用所在目录具备写入权限，以便创建/写入 `userData/`）。
+
+## 数据存储位置
+
+- **Windows**:  `exe` 同级目录下的 `userData/` 目录中。
+- **macOS**: `/Applications/Endfield_Gacha.app/Contents/MacOS/userData/`。
 
 ## 使用说明
 
-### 日志同步（仅限官服 / B 服）
+### 日志同步（仅 Windows，且仅限官服 / B 服）
+
+macOS 请使用下方的「添加账号同步」方式登录后同步。
 
 1. 在对应客户端内打开一次 **抽卡记录页**。
 2. 打开本工具，账号下拉选择 `system(自动识别)`。
