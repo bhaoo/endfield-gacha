@@ -1,0 +1,86 @@
+name: 'release-build'
+
+on:
+  push:
+    branches:
+      - release
+
+jobs:
+  test-tauri:
+    name: Build ${{ matrix.arch }}
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'macos-latest'
+            args: '--target aarch64-apple-darwin'
+            arch: 'macos-arm64'
+          - platform: 'macos-latest'
+            args: '--target x86_64-apple-darwin'
+            arch: 'macos-intel'
+          - platform: 'ubuntu-22.04'
+            arch: 'ubuntu'
+            args: ''
+          - platform: 'windows-latest'
+            args: ''
+            arch: 'windows-exe'
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - name: install dependencies (ubuntu only)
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: install frontend dependencies
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+          run_install: true
+
+      - name: Get version
+        id: get_version
+        shell: bash
+        run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ steps.get_version.outputs.VERSION }}
+          releaseName: "v${{ steps.get_version.outputs.VERSION }}"
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+
+      - name: Prepare Windows Portable
+        if: matrix.platform == 'windows-latest'
+        shell: bash
+        run: |
+          cd src-tauri/target/release
+          mv *.exe Endfield_Gacha_Portable_${{ steps.get_version.outputs.VERSION }}.exe
+
+      - name: Upload Windows Portable
+        if: matrix.platform == 'windows-latest'
+        uses: softprops/action-gh-release@v1
+        with:
+          draft: true
+          prerelease: false
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: ${{ steps.get_version.outputs.VERSION }}
+          files: src-tauri/target/release/Endfield_Gacha_Portable_${{ steps.get_version.outputs.VERSION }}.exe
