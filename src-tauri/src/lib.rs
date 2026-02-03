@@ -5,6 +5,28 @@ use std::{thread, time::Duration};
 use tauri::command;
 use tauri::{AppHandle, Manager, WebviewWindowBuilder, WebviewUrl, Emitter, WindowEvent};
 
+#[cfg(target_os = "linux")]
+const TAURI_IDENTIFIER: &str = "com.bhao.endfieldgacha";
+
+#[cfg(target_os = "linux")]
+fn get_userdata_dir() -> Result<PathBuf, String> {
+    let data_home = if let Some(path) = env::var_os("XDG_DATA_HOME") {
+        PathBuf::from(path)
+    } else if let Some(home) = env::var_os("HOME") {
+        PathBuf::from(home).join(".local").join("share")
+    } else {
+        return Err("Unable to resolve data directory (XDG_DATA_HOME/HOME not set)".to_string());
+    };
+
+    let userdata_dir = data_home.join(TAURI_IDENTIFIER).join("userData");
+
+    if !userdata_dir.exists() {
+        fs::create_dir_all(&userdata_dir).map_err(|e| e.to_string())?;
+    }
+    Ok(userdata_dir)
+}
+
+#[cfg(not(target_os = "linux"))]
 fn get_userdata_dir() -> Result<PathBuf, String> {
     let exe_path = env::current_exe().map_err(|e| e.to_string())?;
     let exe_dir = exe_path.parent().ok_or("Unable to find exe directory")?;
