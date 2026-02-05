@@ -55,6 +55,9 @@
         },
         {
           "url": "https://*.gryphline.com/*"
+        },
+        {
+          "url": "https://api.github.com/*"
         }
       ]
     },

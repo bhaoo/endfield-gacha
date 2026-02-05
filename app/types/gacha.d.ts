@@ -16,6 +16,7 @@ export interface UserRole {
 export interface AppConfig {
   users: User[];
   theme?: 'system' | 'light' | 'dark';
+  updateSeenVersion?: string;
 }
 
 export interface HgApiResponse<T = any> {

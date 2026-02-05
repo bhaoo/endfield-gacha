@@ -9,6 +9,7 @@ import {
 export const useUserStore = () => {
   const userList = useState<User[]>("global-user-list", () => []);
   const { isWindows } = usePlatform();
+  const updateSeenVersion = useState<string>("global-update-seen-version", () => "");
 
   const getUserKey = (u: User) =>
     u.key || (u.roleId?.roleId ? `${u.uid}_${u.roleId.roleId}` : u.uid);
@@ -53,10 +54,13 @@ export const useUserStore = () => {
       const savedTheme = config.theme || "system";
       currentTheme.value = savedTheme;
       colorMode.preference = savedTheme;
+
+      updateSeenVersion.value = config.updateSeenVersion || "";
     } catch (e) {
       console.error("加载配置失败", e);
       userList.value = [];
       currentTheme.value = "system";
+      updateSeenVersion.value = "";
     }
   };
 
@@ -65,6 +69,7 @@ export const useUserStore = () => {
       const configData: AppConfig = {
         users: toRaw(userList.value),
         theme: currentTheme.value,
+        updateSeenVersion: updateSeenVersion.value || "",
       };
       await invoke("save_config", { data: configData });
       console.log("配置已同步到硬盘");
@@ -81,6 +86,11 @@ export const useUserStore = () => {
     currentTheme.value = newTheme;
     colorMode.preference = newTheme;
 
+    await saveConfig();
+  };
+
+  const setUpdateSeenVersion = async (version: string) => {
+    updateSeenVersion.value = String(version || "").trim();
     await saveConfig();
   };
 
@@ -101,6 +111,8 @@ export const useUserStore = () => {
     uidList,
     loadConfig,
     addUser,
+    updateSeenVersion,
+    setUpdateSeenVersion,
     currentTheme,
     setTheme
   };
