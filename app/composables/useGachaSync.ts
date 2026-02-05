@@ -6,6 +6,8 @@ import type {
   EndFieldCharInfo,
   EndFieldWeaponInfo,
   GachaItem,
+  User,
+  UserRole,
 } from "~/types/gacha";
 import {
   analyzePoolData,
@@ -25,6 +27,7 @@ export const useGachaSync = () => {
   const toast = useToast();
   const isSyncing = ref(false);
   const { isWindows, detect: detectPlatform } = usePlatform();
+  const { addUser } = useUserStore();
   type SyncProgress = {
     type: "char" | "weapon" | null;
     poolName: string;
@@ -78,6 +81,7 @@ export const useGachaSync = () => {
     detectedUserKey: string;
     channelLabel: "官服" | "B服" | "未知渠道";
     roleName: string;
+    serverName: string;
   };
 
   const inferChannelLabel = (params: {
@@ -94,7 +98,7 @@ export const useGachaSync = () => {
   const queryUidRoleFromU8Token = async (
     u8Token: string,
     serverId: string,
-  ): Promise<{ uid: string; roleId: string; roleName: string }> => {
+  ): Promise<{ uid: string; roleId: string; roleName: string; serverName: string }> => {
     const res = await fetch(
       "https://u8.hypergryph.com/game/role/v1/query_role_list",
       {
@@ -123,11 +127,12 @@ export const useGachaSync = () => {
       roles[0];
     const roleId = String(role?.roleId ?? "").trim();
     const roleName = String(role?.nickname ?? role?.nickName ?? "").trim();
+    const serverName = String(role?.serverName ?? "").trim();
 
     if (!uid) throw new Error("query_role_list 解析失败: 未找到 uid");
     if (!roleId) throw new Error("query_role_list 解析失败: 未找到 roleId");
 
-    return { uid, roleId, roleName };
+    return { uid, roleId, roleName, serverName };
   };
 
   const getSystemAuthFromLog = async (): Promise<SystemGachaAuth> => {
@@ -144,7 +149,7 @@ export const useGachaSync = () => {
     }
 
     const serverId = "1";
-    const { uid, roleId, roleName } = await queryUidRoleFromU8Token(
+    const { uid, roleId, roleName, serverName } = await queryUidRoleFromU8Token(
       params.u8_token,
       serverId,
     );
@@ -162,6 +167,7 @@ export const useGachaSync = () => {
       detectedUserKey: `${uid}_${roleId}`,
       channelLabel,
       roleName,
+      serverName: serverName || "China",
     };
   };
 
@@ -173,6 +179,36 @@ export const useGachaSync = () => {
       title: title,
       description: desc,
     });
+  };
+
+  const findConfigUserByKey = (config: any, userKey: string): User | null => {
+    const users = Array.isArray(config?.users) ? (config.users as User[]) : [];
+    const u = users.find((x: any) => getUserKey(x) === userKey) as User | undefined;
+    return u || null;
+  };
+
+  const upsertLogUser = async (auth: SystemGachaAuth): Promise<void> => {
+    const key = auth.detectedUserKey;
+
+    await invoke("init_user_record", { uid: key });
+
+    const role: UserRole = {
+      serverId: auth.serverId,
+      serverName: auth.serverName || "China",
+      nickName: auth.roleName || auth.detectedRoleId,
+      roleId: auth.detectedRoleId,
+    };
+
+    const u: User = {
+      key,
+      uid: auth.detectedUid,
+      token: "",
+      provider: "hypergryph",
+      roleId: role,
+      source: "log",
+    };
+
+    await addUser(u);
   };
 
   const charRecords = useState<Record<string, EndFieldCharInfo[]>>(
@@ -437,6 +473,19 @@ export const useGachaSync = () => {
       return;
     }
 
+    // 日志识别账号不支持直接同步（无 token）
+    if (!isSystemUid(uid)) {
+      const config = await invoke<AppConfig>("read_config");
+      const existing = findConfigUserByKey(config, uid);
+      if (existing && (!existing.token || existing.source === "log")) {
+        showToast(
+          "无法同步",
+          "该账号来自日志识别，请选择 system(自动识别) 进行日志同步，或使用“添加账号”登录后再同步。",
+        );
+        return;
+      }
+    }
+
     isSyncing.value = true;
     syncProgress.value = { type, poolName: "", page: 0 };
     showToast(
@@ -450,16 +499,21 @@ export const useGachaSync = () => {
 
       if (isSystemUid(uid)) {
         const systemAuth = await getSystemAuthFromLog();
+        const config = await invoke<AppConfig>("read_config");
+        const existing = findConfigUserByKey(config, systemAuth.detectedUserKey);
+        if (!existing) {
+          await upsertLogUser(systemAuth);
+        } else {
+          await invoke("init_user_record", { uid: systemAuth.detectedUserKey });
+        }
 
         if (uid === SYSTEM_UID_AUTO) {
           effectiveUid = systemAuth.detectedUserKey;
-          if (effectiveUid !== uid) {
-            currentUid.value = effectiveUid;
-            showToast(
-              "成功从日志中识别账号~",
-              `已切换为${systemAuth.channelLabel} ${systemAuth.roleName || systemAuth.detectedRoleId}(${systemAuth.detectedRoleId})`,
-            );
-          }
+          currentUid.value = effectiveUid;
+          showToast(
+            "已识别日志",
+            `已切换为${systemAuth.channelLabel} ${systemAuth.roleName || systemAuth.detectedRoleId}(${systemAuth.detectedRoleId})`,
+          );
         } else {
           showToast(
             "system(官服/Bilibili) 账号已弃用",

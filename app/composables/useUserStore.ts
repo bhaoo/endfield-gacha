@@ -47,6 +47,7 @@ export const useUserStore = () => {
         ? config.users.map((u) => ({
             ...u,
             provider: u.provider || "hypergryph",
+            source: u.source || (u.token ? "login" : "log"),
             key: getUserKey(u),
           }))
         : [];
@@ -95,7 +96,12 @@ export const useUserStore = () => {
   };
 
   const addUser = async (newUser: User): Promise<boolean> => {
-    const normalized = { ...newUser, key: getUserKey(newUser) };
+    const normalized = {
+      ...newUser,
+      provider: newUser.provider || "hypergryph",
+      source: newUser.source || (newUser.token ? "login" : "log"),
+      key: getUserKey(newUser),
+    };
     const index = userList.value.findIndex((u) => getUserKey(u) === normalized.key);
     if (index !== -1) {
       userList.value[index] = normalized;

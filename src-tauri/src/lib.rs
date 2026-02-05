@@ -257,6 +257,23 @@ fn read_config() -> Result<serde_json::Value, String> {
 }
 
 #[command]
+fn init_user_record(uid: String) -> Result<String, String> {
+    if uid.trim().is_empty() {
+        return Err("UID cannot be empty".into());
+    }
+
+    let file_path = get_record_path(&uid)?;
+    if file_path.exists() {
+        return Ok("Record already exists".into());
+    }
+
+    let init_data = serde_json::json!({ "character": {}, "weapon": {} });
+    let json_string = serde_json::to_string_pretty(&init_data).map_err(|e| e.to_string())?;
+    fs::write(file_path, json_string).map_err(|e| e.to_string())?;
+    Ok("Record initialized".into())
+}
+
+#[command]
 fn save_char_records(uid: String, data: serde_json::Value) -> Result<String, String> {
     if uid.trim().is_empty() {
         return Err("UID cannot be empty".into());
@@ -320,6 +337,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             save_config,
             read_config,
+            init_user_record,
             save_char_records,
             read_char_records,
             save_weapon_records,

@@ -4,6 +4,7 @@ export interface User {
   token: string;
   provider?: 'hypergryph' | 'gryphline';
   roleId?: UserRole;
+  source?: 'login' | 'log';
 }
 
 export interface UserRole {
