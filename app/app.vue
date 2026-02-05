@@ -8,9 +8,9 @@
           </UButton>
           <AddAccount @success="handleAccountAdded"></AddAccount>
           <SelectAccount v-model="uid"></SelectAccount>
-          <NuxtLink :href="route.path === '/' ? '/weapon' : '/'">
+          <NuxtLink :to="togglePoolTo">
             <UButton color="neutral" variant="outline">
-              {{ route.path === '/' ? '切换至武器池' : '切换至角色池' }}
+              {{ togglePoolLabel }}
             </UButton>
           </NuxtLink>
           <USeparator v-if="isSyncing && syncProgress.poolName" orientation="vertical" class="h-6 mx-2" />
@@ -20,19 +20,14 @@
         </div>
         <div class="flex items-center gap-2">
           <ColorMode />
-          <UPopover>
-            <UButton label="更多" color="neutral" variant="outline" />
-            <template #content>
-              <UCard>
-                <p>Version 0.4.3</p>
-                <p>本工具为开源软件，源代码使用 MIT 协议授权</p>
-                <p>祝各位大佬欧气满满！如果可以的话，可以给我一个 Star ⭐ 嘛！</p>
-                <p>Github: <ULink @click="open('https://github.com/bhaoo/endfield-gacha')" class="text-primary">
-                    https://github.com/bhaoo/endfield-gacha</ULink>
-                </p>
-              </UCard>
-            </template>
-          </UPopover>
+          <NuxtLink v-if="route.path === '/setting'" :to="settingBackTo">
+            <UButton icon="i-lucide-arrow-left" label="返回" color="neutral" variant="outline" />
+          </NuxtLink>
+          <NuxtLink v-else :to="{ path: '/setting', query: { from: route.fullPath } }">
+            <UChip :show="updateHint" color="primary" size="sm">
+              <UButton icon="i-lucide-settings" label="设置" color="neutral" variant="outline" />
+            </UChip>
+          </NuxtLink>
         </div>
       </div>
 
@@ -50,10 +45,29 @@ const { charRecords, weaponRecords, isSyncing, syncProgress, handleSync, loadCha
 
 const { loadConfig } = useUserStore();
 const { isWindows, detect: detectPlatform } = usePlatform();
+const { updateHint, checkForUpdate } = useUpdate();
 const route = useRoute()
 const uid = useState<string>('current-uid', () => 'none')
+const settingBackTo = computed(() => {
+  const raw = route.query.from
+  const from = Array.isArray(raw) ? raw[0] : raw
+  if (typeof from !== 'string') return '/'
+  if (!from.startsWith('/')) return '/'
+  return from
+})
+const currentMainPage = computed(() => {
+  if (route.path === '/setting') {
+    const from = settingBackTo.value
+    return from.startsWith('/weapon') ? '/weapon' : '/'
+  }
+  return route.path === '/weapon' ? '/weapon' : '/'
+})
+const togglePoolTo = computed(() => (currentMainPage.value === '/' ? '/weapon' : '/'))
+const togglePoolLabel = computed(() =>
+  currentMainPage.value === '/' ? '切换至武器池' : '切换至角色池',
+)
 const gachaType = computed(() => {
-  return route.path === '/' ? 'char' : 'weapon'
+  return currentMainPage.value === '/' ? 'char' : 'weapon'
 })
 
 const loadAllData = (uid: string) => {
@@ -83,6 +97,8 @@ onMounted(async () => {
   if (uid.value && uid.value !== 'none') {
     loadAllData(uid.value);
   }
+
+  checkForUpdate().catch(console.error);
 });
 
 const onSyncClick = () => {

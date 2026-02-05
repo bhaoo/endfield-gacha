@@ -5,6 +5,28 @@ use std::{thread, time::Duration};
 use tauri::command;
 use tauri::{AppHandle, Manager, WebviewWindowBuilder, WebviewUrl, Emitter, WindowEvent};
 
+#[cfg(target_os = "linux")]
+const TAURI_IDENTIFIER: &str = "com.bhao.endfieldgacha";
+
+#[cfg(target_os = "linux")]
+fn get_userdata_dir() -> Result<PathBuf, String> {
+    let data_home = if let Some(path) = env::var_os("XDG_DATA_HOME") {
+        PathBuf::from(path)
+    } else if let Some(home) = env::var_os("HOME") {
+        PathBuf::from(home).join(".local").join("share")
+    } else {
+        return Err("Unable to resolve data directory (XDG_DATA_HOME/HOME not set)".to_string());
+    };
+
+    let userdata_dir = data_home.join(TAURI_IDENTIFIER).join("userData");
+
+    if !userdata_dir.exists() {
+        fs::create_dir_all(&userdata_dir).map_err(|e| e.to_string())?;
+    }
+    Ok(userdata_dir)
+}
+
+#[cfg(not(target_os = "linux"))]
 fn get_userdata_dir() -> Result<PathBuf, String> {
     let exe_path = env::current_exe().map_err(|e| e.to_string())?;
     let exe_dir = exe_path.parent().ok_or("Unable to find exe directory")?;
@@ -235,6 +257,23 @@ fn read_config() -> Result<serde_json::Value, String> {
 }
 
 #[command]
+fn init_user_record(uid: String) -> Result<String, String> {
+    if uid.trim().is_empty() {
+        return Err("UID cannot be empty".into());
+    }
+
+    let file_path = get_record_path(&uid)?;
+    if file_path.exists() {
+        return Ok("Record already exists".into());
+    }
+
+    let init_data = serde_json::json!({ "character": {}, "weapon": {} });
+    let json_string = serde_json::to_string_pretty(&init_data).map_err(|e| e.to_string())?;
+    fs::write(file_path, json_string).map_err(|e| e.to_string())?;
+    Ok("Record initialized".into())
+}
+
+#[command]
 fn save_char_records(uid: String, data: serde_json::Value) -> Result<String, String> {
     if uid.trim().is_empty() {
         return Err("UID cannot be empty".into());
@@ -298,6 +337,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             save_config,
             read_config,
+            init_user_record,
             save_char_records,
             read_char_records,
             save_weapon_records,

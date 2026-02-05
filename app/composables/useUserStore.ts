@@ -4,13 +4,12 @@ import {
   isSystemUid,
   systemUidLabel,
   SYSTEM_UID_AUTO,
-  SYSTEM_UID_BILIBILI,
-  SYSTEM_UID_OFFICIAL,
 } from "~/utils/systemAccount";
 
 export const useUserStore = () => {
   const userList = useState<User[]>("global-user-list", () => []);
   const { isWindows } = usePlatform();
+  const updateSeenVersion = useState<string>("global-update-seen-version", () => "");
 
   const getUserKey = (u: User) =>
     u.key || (u.roleId?.roleId ? `${u.uid}_${u.roleId.roleId}` : u.uid);
@@ -20,14 +19,6 @@ export const useUserStore = () => {
       ...(isWindows.value
         ? [
             { label: systemUidLabel(SYSTEM_UID_AUTO), value: SYSTEM_UID_AUTO },
-            {
-              label: systemUidLabel(SYSTEM_UID_OFFICIAL),
-              value: SYSTEM_UID_OFFICIAL,
-            },
-            {
-              label: systemUidLabel(SYSTEM_UID_BILIBILI),
-              value: SYSTEM_UID_BILIBILI,
-            },
           ]
         : []),
       ...userList.value
@@ -56,6 +47,7 @@ export const useUserStore = () => {
         ? config.users.map((u) => ({
             ...u,
             provider: u.provider || "hypergryph",
+            source: u.source || (u.token ? "login" : "log"),
             key: getUserKey(u),
           }))
         : [];
@@ -63,10 +55,13 @@ export const useUserStore = () => {
       const savedTheme = config.theme || "system";
       currentTheme.value = savedTheme;
       colorMode.preference = savedTheme;
+
+      updateSeenVersion.value = config.updateSeenVersion || "";
     } catch (e) {
       console.error("加载配置失败", e);
       userList.value = [];
       currentTheme.value = "system";
+      updateSeenVersion.value = "";
     }
   };
 
@@ -75,6 +70,7 @@ export const useUserStore = () => {
       const configData: AppConfig = {
         users: toRaw(userList.value),
         theme: currentTheme.value,
+        updateSeenVersion: updateSeenVersion.value || "",
       };
       await invoke("save_config", { data: configData });
       console.log("配置已同步到硬盘");
@@ -94,8 +90,18 @@ export const useUserStore = () => {
     await saveConfig();
   };
 
+  const setUpdateSeenVersion = async (version: string) => {
+    updateSeenVersion.value = String(version || "").trim();
+    await saveConfig();
+  };
+
   const addUser = async (newUser: User): Promise<boolean> => {
-    const normalized = { ...newUser, key: getUserKey(newUser) };
+    const normalized = {
+      ...newUser,
+      provider: newUser.provider || "hypergryph",
+      source: newUser.source || (newUser.token ? "login" : "log"),
+      key: getUserKey(newUser),
+    };
     const index = userList.value.findIndex((u) => getUserKey(u) === normalized.key);
     if (index !== -1) {
       userList.value[index] = normalized;
@@ -111,6 +117,8 @@ export const useUserStore = () => {
     uidList,
     loadConfig,
     addUser,
+    updateSeenVersion,
+    setUpdateSeenVersion,
     currentTheme,
     setTheme
   };
