@@ -4,8 +4,6 @@ import {
   isSystemUid,
   systemUidLabel,
   SYSTEM_UID_AUTO,
-  SYSTEM_UID_BILIBILI,
-  SYSTEM_UID_OFFICIAL,
 } from "~/utils/systemAccount";
 
 export const useUserStore = () => {
@@ -20,14 +18,6 @@ export const useUserStore = () => {
       ...(isWindows.value
         ? [
             { label: systemUidLabel(SYSTEM_UID_AUTO), value: SYSTEM_UID_AUTO },
-            {
-              label: systemUidLabel(SYSTEM_UID_OFFICIAL),
-              value: SYSTEM_UID_OFFICIAL,
-            },
-            {
-              label: systemUidLabel(SYSTEM_UID_BILIBILI),
-              value: SYSTEM_UID_BILIBILI,
-            },
           ]
         : []),
       ...userList.value

@@ -16,9 +16,7 @@ import {
   parseGachaParams,
 } from "~/utils/gachaCalc";
 import {
-  inferSystemChannel,
   isSystemUid,
-  systemUidFromChannel,
   systemUidLabel,
   SYSTEM_UID_AUTO,
 } from "~/utils/systemAccount";
@@ -75,9 +73,61 @@ export const useGachaSync = () => {
   };
 
   type SystemGachaAuth = GachaAuth & {
+    detectedUid: string;
+    detectedRoleId: string;
+    detectedUserKey: string;
+    channelLabel: "官服" | "B服" | "未知渠道";
+    roleName: string;
+  };
+
+  const inferChannelLabel = (params: {
     channel?: string;
     subChannel?: string;
-    inferredUid: string;
+  }): "官服" | "B服" | "未知渠道" => {
+    const channel = String(params.channel ?? "");
+    const subChannel = String(params.subChannel ?? "");
+    if (channel === "1" && subChannel === "1") return "官服";
+    if (channel === "2" && subChannel === "2") return "B服";
+    return "未知渠道";
+  };
+
+  const queryUidRoleFromU8Token = async (
+    u8Token: string,
+    serverId: string,
+  ): Promise<{ uid: string; roleId: string; roleName: string }> => {
+    const res = await fetch(
+      "https://u8.hypergryph.com/game/role/v1/query_role_list",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json;charset=UTF-8",
+          "User-Agent": user_agent.value,
+        },
+        body: JSON.stringify({ token: u8Token, serverId }),
+      },
+    );
+
+    if (!res.ok) {
+      throw new Error(`query_role_list 请求失败: ${res.status}`);
+    }
+
+    const json = await res.json();
+    if (json?.status !== 0) {
+      throw new Error(`query_role_list 返回异常: ${json?.msg || "unknown"}`);
+    }
+
+    const uid = String(json?.data?.uid ?? "").trim();
+    const roles = Array.isArray(json?.data?.roles) ? json.data.roles : [];
+    const role =
+      roles.find((r: any) => String(r?.serverId ?? "") === String(serverId)) ??
+      roles[0];
+    const roleId = String(role?.roleId ?? "").trim();
+    const roleName = String(role?.nickname ?? role?.nickName ?? "").trim();
+
+    if (!uid) throw new Error("query_role_list 解析失败: 未找到 uid");
+    if (!roleId) throw new Error("query_role_list 解析失败: 未找到 roleId");
+
+    return { uid, roleId, roleName };
   };
 
   const getSystemAuthFromLog = async (): Promise<SystemGachaAuth> => {
@@ -93,7 +143,12 @@ export const useGachaSync = () => {
       throw new Error("抽卡链接参数解析失败：未找到 u8_token");
     }
 
-    const channelType = inferSystemChannel({
+    const serverId = "1";
+    const { uid, roleId, roleName } = await queryUidRoleFromU8Token(
+      params.u8_token,
+      serverId,
+    );
+    const channelLabel = inferChannelLabel({
       channel: params.channel,
       subChannel: params.subChannel,
     });
@@ -101,10 +156,12 @@ export const useGachaSync = () => {
     return {
       u8Token: params.u8_token,
       provider: "hypergryph",
-      serverId: "1",
-      channel: params.channel,
-      subChannel: params.subChannel,
-      inferredUid: systemUidFromChannel(channelType),
+      serverId,
+      detectedUid: uid,
+      detectedRoleId: roleId,
+      detectedUserKey: `${uid}_${roleId}`,
+      channelLabel,
+      roleName,
     };
   };
 
@@ -395,18 +452,21 @@ export const useGachaSync = () => {
         const systemAuth = await getSystemAuthFromLog();
 
         if (uid === SYSTEM_UID_AUTO) {
-          effectiveUid = systemAuth.inferredUid || SYSTEM_UID_AUTO;
+          effectiveUid = systemAuth.detectedUserKey;
           if (effectiveUid !== uid) {
             currentUid.value = effectiveUid;
             showToast(
-              "已自动识别服务器渠道",
-              `已切换为 ${systemUidLabel(effectiveUid)}`,
+              "成功从日志中识别账号~",
+              `已切换为${systemAuth.channelLabel} ${systemAuth.roleName || systemAuth.detectedRoleId}(${systemAuth.detectedRoleId})`,
             );
           }
-        } else if (systemAuth.inferredUid && systemAuth.inferredUid !== uid) {
-          throw new Error(
-            `当前日志识别为 ${systemUidLabel(systemAuth.inferredUid)}，但你选择的是 ${systemUidLabel(uid)}。请切换账号选择，或在对应客户端内打开一次抽卡记录页后再同步哦。`,
+        } else {
+          showToast(
+            "system(官服/Bilibili) 账号已弃用",
+            `当前选择的是 ${systemUidLabel(uid)}，将按 system(自动识别) 方式同步`,
           );
+          effectiveUid = systemAuth.detectedUserKey;
+          currentUid.value = effectiveUid;
         }
 
         auth = systemAuth;
