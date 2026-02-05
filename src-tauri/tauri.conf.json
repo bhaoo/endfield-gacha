@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Endfield_Gacha",
-  "version": "0.4.3",
+  "version": "0.4.4",
   "identifier": "com.bhao.endfieldgacha",
   "build": {
     "frontendDist": "../.output/public",
