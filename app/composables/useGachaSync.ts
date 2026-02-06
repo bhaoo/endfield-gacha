@@ -1,6 +1,6 @@
 import { fetch } from "@tauri-apps/plugin-http";
 import { invoke } from "@tauri-apps/api/core";
-import { readTextFile, BaseDirectory } from '@tauri-apps/plugin-fs';
+import { readTextFile, BaseDirectory } from "@tauri-apps/plugin-fs";
 import type {
   AppConfig,
   EndFieldCharInfo,
@@ -21,6 +21,10 @@ import {
   isSystemUid,
   systemUidLabel,
   SYSTEM_UID_AUTO,
+  SYSTEM_UID_BILIBILI,
+  SYSTEM_UID_CN,
+  SYSTEM_UID_GLOBAL,
+  SYSTEM_UID_OFFICIAL,
 } from "~/utils/systemAccount";
 
 export const useGachaSync = () => {
@@ -43,12 +47,15 @@ export const useGachaSync = () => {
   );
   const currentUid = useState<string>("current-uid", () => "none");
 
-  const getGachaUri = async () => {
+  const getGachaUri = async (provider: "hypergryph" | "gryphline") => {
     await detectPlatform();
     if (!isWindows.value) return "";
+
     const logPath =
-      "AppData/LocalLow/Hypergryph/Endfield/sdklogs/HGWebview.log";
-    const targetPrefix = "https://ef-webview.hypergryph.com/page/gacha_char";
+      provider === "gryphline"
+        ? "AppData/LocalLow/Gryphline/Endfield/sdklogs/HGWebview.log"
+        : "AppData/LocalLow/Hypergryph/Endfield/sdklogs/HGWebview.log";
+    const targetPrefix = `https://ef-webview.${provider}.com/page/gacha_`;
     try {
       const content = await readTextFile(logPath, {
         baseDir: BaseDirectory.Home,
@@ -57,14 +64,16 @@ export const useGachaSync = () => {
       const matchLine = lines.find((line) => line.includes(targetPrefix));
 
       if (matchLine) {
-        const urlRegex =
-          /(https:\/\/ef-webview\.hypergryph\.com\/page\/gacha_char[^\s]*)/;
+        const urlRegex = new RegExp(
+          `(https:\\/\\/ef-webview\\.${provider}\\.com\\/page\\/gacha_[^\\s]*)`,
+        );
         const result = matchLine.match(urlRegex);
+        console.log(result?.[1])
         return result?.[1] || "";
       }
       return "";
     } catch (err) {
-      console.error("日志读取失败:", err);
+      console.error(`[日志读取失败] provider=${provider}`, err);
       return "";
     }
   };
@@ -79,7 +88,7 @@ export const useGachaSync = () => {
     detectedUid: string;
     detectedRoleId: string;
     detectedUserKey: string;
-    channelLabel: "官服" | "B服" | "未知渠道";
+    channelLabel: string;
     roleName: string;
     serverName: string;
   };
@@ -96,11 +105,17 @@ export const useGachaSync = () => {
   };
 
   const queryUidRoleFromU8Token = async (
+    provider: "hypergryph" | "gryphline",
     u8Token: string,
     serverId: string,
-  ): Promise<{ uid: string; roleId: string; roleName: string; serverName: string }> => {
+  ): Promise<{
+    uid: string;
+    roleId: string;
+    roleName: string;
+    serverName: string;
+  }> => {
     const res = await fetch(
-      "https://u8.hypergryph.com/game/role/v1/query_role_list",
+      `https://u8.${provider}.com/game/role/v1/query_role_list`,
       {
         method: "POST",
         headers: {
@@ -135,11 +150,26 @@ export const useGachaSync = () => {
     return { uid, roleId, roleName, serverName };
   };
 
-  const getSystemAuthFromLog = async (): Promise<SystemGachaAuth> => {
-    const uri = await getGachaUri();
+  const getSystemAuthFromLog = async (
+    systemUid: string,
+  ): Promise<SystemGachaAuth> => {
+    // system(自动识别) 仅用于兼容旧版本：优先尝试国服日志，找不到再尝试国际服日志。
+    let provider: "hypergryph" | "gryphline" =
+      systemUid === SYSTEM_UID_GLOBAL ? "gryphline" : "hypergryph";
+
+    let uri = "";
+    if (systemUid === SYSTEM_UID_AUTO) {
+      uri =
+        (await getGachaUri("hypergryph")) || (await getGachaUri("gryphline"));
+      provider = uri.includes("ef-webview.gryphline.com")
+        ? "gryphline"
+        : "hypergryph";
+    } else {
+      uri = await getGachaUri(provider);
+    }
     if (!uri) {
       throw new Error(
-        "未在日志中找到抽卡链接哦~请先在游戏内打开一次抽卡记录页面（角色池即可），再进行同步~",
+        "未在日志中找到抽卡链接哦~请先在游戏内打开一次抽卡记录页面，再进行同步~",
       );
     }
 
@@ -148,26 +178,47 @@ export const useGachaSync = () => {
       throw new Error("抽卡链接参数解析失败：未找到 u8_token");
     }
 
-    const serverId = "1";
+    const pickServerId = () => {
+      const candidates = [
+        (params as any)?.server_id,
+        (params as any)?.serverId,
+        (params as any)?.serverid,
+        (params as any)?.server,
+      ];
+      return String(
+        candidates.find((x) => x != null && String(x).trim() !== "") ?? "",
+      ).trim();
+    };
+
+    const serverId = provider === "gryphline" ? pickServerId() : "1";
+    if (provider === "gryphline" && !serverId) {
+      throw new Error("抽卡链接参数解析失败：未找到 serverId（国际服需要）");
+    }
+
     const { uid, roleId, roleName, serverName } = await queryUidRoleFromU8Token(
+      provider,
       params.u8_token,
       serverId,
     );
-    const channelLabel = inferChannelLabel({
-      channel: params.channel,
-      subChannel: params.subChannel,
-    });
+
+    const channelLabel =
+      provider === "hypergryph"
+        ? inferChannelLabel({
+            channel: params.channel,
+            subChannel: params.subChannel,
+          })
+        : "国际服";
 
     return {
       u8Token: params.u8_token,
-      provider: "hypergryph",
+      provider,
       serverId,
       detectedUid: uid,
       detectedRoleId: roleId,
       detectedUserKey: `${uid}_${roleId}`,
       channelLabel,
       roleName,
-      serverName: serverName || "China",
+      serverName: serverName || (provider === "gryphline" ? "Global" : "China"),
     };
   };
 
@@ -183,7 +234,9 @@ export const useGachaSync = () => {
 
   const findConfigUserByKey = (config: any, userKey: string): User | null => {
     const users = Array.isArray(config?.users) ? (config.users as User[]) : [];
-    const u = users.find((x: any) => getUserKey(x) === userKey) as User | undefined;
+    const u = users.find((x: any) => getUserKey(x) === userKey) as
+      | User
+      | undefined;
     return u || null;
   };
 
@@ -194,7 +247,8 @@ export const useGachaSync = () => {
 
     const role: UserRole = {
       serverId: auth.serverId,
-      serverName: auth.serverName || "China",
+      serverName:
+        auth.serverName || (auth.provider === "gryphline" ? "Global" : "China"),
       nickName: auth.roleName || auth.detectedRoleId,
       roleId: auth.detectedRoleId,
     };
@@ -203,7 +257,7 @@ export const useGachaSync = () => {
       key,
       uid: auth.detectedUid,
       token: "",
-      provider: "hypergryph",
+      provider: auth.provider,
       roleId: role,
       source: "log",
     };
@@ -285,6 +339,7 @@ export const useGachaSync = () => {
     serverId: string,
     extraParams: Record<string, string>,
     progress?: { type: "char" | "weapon"; poolName: string },
+    lang: string = "zh-cn",
   ): Promise<T[]> => {
     const allData: T[] = [];
     let nextSeqId = "";
@@ -303,7 +358,7 @@ export const useGachaSync = () => {
         }
 
         const query = new URLSearchParams({
-          lang: "zh-cn",
+          lang,
           token: u8_token,
           server_id: serverId,
           ...extraParams,
@@ -369,7 +424,10 @@ export const useGachaSync = () => {
           },
           body: JSON.stringify({
             type: 1,
-            appCode: provider === "gryphline" ? "3dacefa138426cfe" : "be36d44aa36bfb5b",
+            appCode:
+              provider === "gryphline"
+                ? "3dacefa138426cfe"
+                : "be36d44aa36bfb5b",
             token: targetUser.token,
           }),
         },
@@ -404,6 +462,8 @@ export const useGachaSync = () => {
     provider: "hypergryph" | "gryphline",
     serverId: string,
   ) => {
+    // const lang = provider === "gryphline" ? "en-us" : "zh-cn";
+    const lang = "zh-cn";
     const fetched: Record<string, EndFieldCharInfo[]> = {};
     for (const poolType of POOL_TYPES) {
       const poolName = POOL_NAME_MAP[poolType] || poolType;
@@ -413,6 +473,7 @@ export const useGachaSync = () => {
         serverId,
         { pool_type: poolType },
         { type: "char", poolName },
+        lang,
       );
     }
     return await saveUserData(uid, fetched, "char");
@@ -424,9 +485,15 @@ export const useGachaSync = () => {
     provider: "hypergryph" | "gryphline",
     serverId: string,
   ) => {
-    syncProgress.value = { type: "weapon", poolName: "获取武器池列表", page: 1 };
+    // const lang = provider === "gryphline" ? "en-us" : "zh-cn";
+    const lang = "zh-cn";
+    syncProgress.value = {
+      type: "weapon",
+      poolName: "获取武器池列表",
+      page: 1,
+    };
     const query = new URLSearchParams({
-      lang: "zh-cn",
+      lang,
       token: u8_token,
       server_id: serverId,
     });
@@ -452,6 +519,7 @@ export const useGachaSync = () => {
         serverId,
         { pool_id: pool.poolId },
         { type: "weapon", poolName: pool.poolName || pool.poolId },
+        lang,
       );
     }
     return await saveUserData(uid, fetched, "weapon");
@@ -480,7 +548,7 @@ export const useGachaSync = () => {
       if (existing && (!existing.token || existing.source === "log")) {
         showToast(
           "无法同步",
-          "该账号来自日志识别，请选择 system(自动识别) 进行日志同步，或使用“添加账号”登录后再同步。",
+          "该账号来自日志识别，请选择 system(国服) 或 system(国际服) 进行日志同步，或使用“添加账号”登录后再同步。",
         );
         return;
       }
@@ -498,29 +566,47 @@ export const useGachaSync = () => {
       let auth: GachaAuth | null = null;
 
       if (isSystemUid(uid)) {
-        const systemAuth = await getSystemAuthFromLog();
+        const systemAuth = await getSystemAuthFromLog(uid);
         const config = await invoke<AppConfig>("read_config");
-        const existing = findConfigUserByKey(config, systemAuth.detectedUserKey);
+        const existing = findConfigUserByKey(
+          config,
+          systemAuth.detectedUserKey,
+        );
         if (!existing) {
           await upsertLogUser(systemAuth);
         } else {
           await invoke("init_user_record", { uid: systemAuth.detectedUserKey });
         }
 
-        if (uid === SYSTEM_UID_AUTO) {
-          effectiveUid = systemAuth.detectedUserKey;
-          currentUid.value = effectiveUid;
+        effectiveUid = systemAuth.detectedUserKey;
+        currentUid.value = effectiveUid;
+
+        const isMainSystemUid =
+          uid === SYSTEM_UID_CN || uid === SYSTEM_UID_GLOBAL;
+        const isLegacySystemUid =
+          uid === SYSTEM_UID_AUTO ||
+          uid === SYSTEM_UID_OFFICIAL ||
+          uid === SYSTEM_UID_BILIBILI;
+
+        const regionLabel =
+          systemAuth.provider === "gryphline"
+            ? systemUidLabel(SYSTEM_UID_GLOBAL)
+            : systemUidLabel(SYSTEM_UID_CN);
+
+        if (isMainSystemUid) {
+          const extra =
+            systemAuth.provider === "hypergryph"
+              ? systemAuth.channelLabel
+              : systemAuth.serverName || "Global";
           showToast(
             "已识别日志",
-            `已切换为${systemAuth.channelLabel} ${systemAuth.roleName || systemAuth.detectedRoleId}(${systemAuth.detectedRoleId})`,
+            `已切换为 [${extra}] ${systemAuth.roleName || systemAuth.detectedRoleId}(${systemAuth.detectedRoleId})`,
           );
-        } else {
+        } else if (isLegacySystemUid) {
           showToast(
-            "system(官服/Bilibili) 账号已弃用",
-            `当前选择的是 ${systemUidLabel(uid)}，将按 system(自动识别) 方式同步`,
+            "system 入口已调整",
+            `当前选择的是 ${systemUidLabel(uid)}，本次将按 ${regionLabel} 方式同步`,
           );
-          effectiveUid = systemAuth.detectedUserKey;
-          currentUid.value = effectiveUid;
         }
 
         auth = systemAuth;

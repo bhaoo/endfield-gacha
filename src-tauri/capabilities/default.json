@@ -15,6 +15,9 @@
           "path": "$HOME/AppData/LocalLow/Hypergryph/Endfield/sdklogs/*"
         },
         {
+          "path": "$HOME/AppData/LocalLow/Gryphline/Endfield/sdklogs/*"
+        },
+        {
           "path": "$EXE/**"
         }
       ]
@@ -24,6 +27,9 @@
       "allow": [
         {
           "path": "$HOME/AppData/LocalLow/Hypergryph/Endfield/sdklogs/*"
+        },
+        {
+          "path": "$HOME/AppData/LocalLow/Gryphline/Endfield/sdklogs/*"
         },
         {
           "path": "$EXE/**"

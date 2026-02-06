@@ -3,7 +3,8 @@ import type { AppConfig, User } from "~/types/gacha";
 import {
   isSystemUid,
   systemUidLabel,
-  SYSTEM_UID_AUTO,
+  SYSTEM_UID_CN,
+  SYSTEM_UID_GLOBAL,
 } from "~/utils/systemAccount";
 
 export const useUserStore = () => {
@@ -18,7 +19,8 @@ export const useUserStore = () => {
     [
       ...(isWindows.value
         ? [
-            { label: systemUidLabel(SYSTEM_UID_AUTO), value: SYSTEM_UID_AUTO },
+            { label: systemUidLabel(SYSTEM_UID_CN), value: SYSTEM_UID_CN },
+            { label: systemUidLabel(SYSTEM_UID_GLOBAL), value: SYSTEM_UID_GLOBAL },
           ]
         : []),
       ...userList.value
