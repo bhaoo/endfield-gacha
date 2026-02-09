@@ -79,7 +79,7 @@
 <script setup lang="ts">
 import { isSystemUid, systemUidLabel, SYSTEM_UID_CN } from '~/utils/systemAccount'
 
-const uid = useState<string>('current-uid')
+const { currentUser: uid } = useUserStore()
 
 const { weaponStatistics: statistics } = useGachaSync();
 

@@ -11,6 +11,7 @@ export const useUserStore = () => {
   const userList = useState<User[]>("global-user-list", () => []);
   const { isWindows } = usePlatform();
   const updateSeenVersion = useState<string>("global-update-seen-version", () => "");
+  const currentUser = useState<string>("global-current-user", () => "");
 
   const getUserKey = (u: User) =>
     u.key || (u.roleId?.roleId ? `${u.uid}_${u.roleId.roleId}` : u.uid);
@@ -54,6 +55,10 @@ export const useUserStore = () => {
           }))
         : [];
 
+      if (config.currentUser) {
+        currentUser.value = config.currentUser;
+      }
+
       const savedTheme = config.theme || "system";
       currentTheme.value = savedTheme;
       colorMode.preference = savedTheme;
@@ -71,6 +76,7 @@ export const useUserStore = () => {
     try {
       const configData: AppConfig = {
         users: toRaw(userList.value),
+        currentUser: currentUser.value,
         theme: currentTheme.value,
         updateSeenVersion: updateSeenVersion.value || "",
       };
@@ -82,6 +88,12 @@ export const useUserStore = () => {
       return false;
     }
   };
+
+  watch(currentUser, async (newVal, oldVal) => {
+    if (newVal !== oldVal) {
+      await saveConfig();
+    }
+  });
 
   const setTheme = async (newTheme: "system" | "light" | "dark") => {
     if (currentTheme.value === newTheme) return;
@@ -117,6 +129,7 @@ export const useUserStore = () => {
   return {
     userList,
     uidList,
+    currentUser,
     loadConfig,
     addUser,
     updateSeenVersion,

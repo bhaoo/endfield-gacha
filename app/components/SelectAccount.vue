@@ -7,7 +7,7 @@ import { isSystemUid } from '~/utils/systemAccount'
 
 const uid = defineModel<string>({ required: true })
 
-const { uidList, loadConfig } = useUserStore()
+const { uidList, loadConfig, currentUser } = useUserStore()
 const { isWindows, detect: detectPlatform } = usePlatform()
 
 const ensureSelected = () => {
@@ -21,7 +21,11 @@ onMounted(async () => {
   await loadConfig()
 
   if (!isWindows.value && isSystemUid(uid.value)) {
-    uid.value = 'none'
+    if ( currentUser.value && uidList.value.includes(currentUser.value) ) {
+      uid.value = currentUser.value
+    } else {
+      uid.value = 'none'
+    }
   }
 
   ensureSelected()
