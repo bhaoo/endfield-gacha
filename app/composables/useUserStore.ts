@@ -12,6 +12,7 @@ export const useUserStore = () => {
   const { isWindows } = usePlatform();
   const updateSeenVersion = useState<string>("global-update-seen-version", () => "");
   const currentUser = useState<string>("global-current-user", () => "");
+  const savabled = useState<boolean>("global-savabled", () => false);
 
   const getUserKey = (u: User) =>
     u.key || (u.roleId?.roleId ? `${u.uid}_${u.roleId.roleId}` : u.uid);
@@ -43,6 +44,7 @@ export const useUserStore = () => {
   );
 
   const loadConfig = async () => {
+    savabled.value = false;
     try {
       await usePlatform().detect();
       const config = await invoke<AppConfig>("read_config");
@@ -69,10 +71,16 @@ export const useUserStore = () => {
       userList.value = [];
       currentTheme.value = "system";
       updateSeenVersion.value = "";
+    } finally {
+      savabled.value = true;
     }
   };
 
   const saveConfig = async (): Promise<boolean> => {
+    if (!savabled.value) {
+      console.log("当前状态不允许保存配置");
+      return false;
+    }
     try {
       const configData: AppConfig = {
         users: toRaw(userList.value),
@@ -135,6 +143,6 @@ export const useUserStore = () => {
     updateSeenVersion,
     setUpdateSeenVersion,
     currentTheme,
-    setTheme
+    setTheme,
   };
 };
