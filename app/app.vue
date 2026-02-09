@@ -43,11 +43,10 @@ import { isSystemUid } from '~/utils/systemAccount'
 
 const { charRecords, weaponRecords, isSyncing, syncProgress, handleSync, loadCharData, loadWeaponData } = useGachaSync();
 
-const { loadConfig } = useUserStore();
+const { loadConfig, currentUser: uid } = useUserStore();
 const { isWindows, detect: detectPlatform } = usePlatform();
 const { updateHint, checkForUpdate } = useUpdate();
 const route = useRoute()
-const uid = useState<string>('current-uid', () => 'none')
 const settingBackTo = computed(() => {
   const raw = route.query.from
   const from = Array.isArray(raw) ? raw[0] : raw

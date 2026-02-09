@@ -16,6 +16,7 @@ export interface UserRole {
 
 export interface AppConfig {
   users: User[];
+  currentUser?: string;
   theme?: 'system' | 'light' | 'dark';
   updateSeenVersion?: string;
 }

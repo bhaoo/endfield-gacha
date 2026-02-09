@@ -11,6 +11,8 @@ export const useUserStore = () => {
   const userList = useState<User[]>("global-user-list", () => []);
   const { isWindows } = usePlatform();
   const updateSeenVersion = useState<string>("global-update-seen-version", () => "");
+  const currentUser = useState<string>("global-current-user", () => "none");
+  const savabled = useState<boolean>("global-savabled", () => false);
 
   const getUserKey = (u: User) =>
     u.key || (u.roleId?.roleId ? `${u.uid}_${u.roleId.roleId}` : u.uid);
@@ -42,6 +44,7 @@ export const useUserStore = () => {
   );
 
   const loadConfig = async () => {
+    savabled.value = false;
     try {
       await usePlatform().detect();
       const config = await invoke<AppConfig>("read_config");
@@ -54,6 +57,10 @@ export const useUserStore = () => {
           }))
         : [];
 
+      if (config.currentUser) {
+        currentUser.value = config.currentUser;
+      }
+
       const savedTheme = config.theme || "system";
       currentTheme.value = savedTheme;
       colorMode.preference = savedTheme;
@@ -64,13 +71,20 @@ export const useUserStore = () => {
       userList.value = [];
       currentTheme.value = "system";
       updateSeenVersion.value = "";
+    } finally {
+      savabled.value = true;
     }
   };
 
   const saveConfig = async (): Promise<boolean> => {
+    if (!savabled.value) {
+      console.log("当前状态不允许保存配置");
+      return false;
+    }
     try {
       const configData: AppConfig = {
         users: toRaw(userList.value),
+        currentUser: currentUser.value,
         theme: currentTheme.value,
         updateSeenVersion: updateSeenVersion.value || "",
       };
@@ -82,6 +96,12 @@ export const useUserStore = () => {
       return false;
     }
   };
+
+  watch(currentUser, async (newVal, oldVal) => {
+    if (newVal !== oldVal) {
+      await saveConfig();
+    }
+  });
 
   const setTheme = async (newTheme: "system" | "light" | "dark") => {
     if (currentTheme.value === newTheme) return;
@@ -117,11 +137,12 @@ export const useUserStore = () => {
   return {
     userList,
     uidList,
+    currentUser,
     loadConfig,
     addUser,
     updateSeenVersion,
     setUpdateSeenVersion,
     currentTheme,
-    setTheme
+    setTheme,
   };
 };
