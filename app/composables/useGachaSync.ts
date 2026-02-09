@@ -5,17 +5,21 @@ import type {
   AppConfig,
   EndFieldCharInfo,
   EndFieldWeaponInfo,
+  GachaStatistics,
   GachaItem,
+  PoolInfoEntry,
   User,
   UserRole,
 } from "~/types/gacha";
 import {
   analyzePoolData,
+  analyzeSpecialPoolData,
   analyzeWeaponPoolData,
   delay,
   POOL_TYPES,
   POOL_NAME_MAP,
   parseGachaParams,
+  SPECIAL_POOL_KEY,
 } from "~/utils/gachaCalc";
 import {
   isSystemUid,
@@ -47,8 +51,123 @@ export const useGachaSync = () => {
   );
   const currentUid = useState<string>("current-uid", () => "none");
 
+  const poolInfoLoaded = ref(false);
+  const poolInfo = useState<PoolInfoEntry[]>("gacha-pool-info", () => []);
+  const poolInfoById = computed(() => {
+    const map: Record<string, PoolInfoEntry> = {};
+    for (const it of poolInfo.value || []) {
+      if (it && typeof it.pool_id === "string" && it.pool_id)
+        map[it.pool_id] = it;
+    }
+    return map;
+  });
+
+  const loadPoolInfo = async () => {
+    if (poolInfoLoaded.value) return;
+    try {
+      const data = await invoke<any>("read_pool_info");
+      poolInfo.value = Array.isArray(data) ? (data as PoolInfoEntry[]) : [];
+    } catch (e) {
+      console.error("[poolInfo] read_pool_info failed", e);
+      poolInfo.value = [];
+    } finally {
+      poolInfoLoaded.value = true;
+    }
+  };
+
+  const savePoolInfo = async () => {
+    try {
+      await invoke("save_pool_info", { data: poolInfo.value });
+    } catch (e) {
+      console.error("[poolInfo] save_pool_info failed", e);
+    }
+  };
+
+  const fetchPoolInfoFromApi = async (
+    provider: "hypergryph" | "gryphline",
+    serverId: string,
+    poolId: string,
+    lang: string,
+  ): Promise<PoolInfoEntry | null> => {
+    try {
+      const query = new URLSearchParams({
+        lang,
+        pool_id: poolId,
+        server_id: serverId,
+      });
+      const url = `https://ef-webview.${provider}.com/api/content?${query.toString()}`;
+      const res = await fetch(url, {
+        method: "GET",
+        headers: { "User-Agent": user_agent.value },
+      });
+      if (!res.ok) return null;
+      const json: any = await res.json();
+      const pool = json?.code === 0 ? json?.data?.pool : null;
+      if (!pool) return null;
+
+      const up6Name = String(pool.up6_name || "").trim();
+      const all = Array.isArray(pool.all) ? pool.all : [];
+      let up6Id = "";
+      if (up6Name) {
+        const found =
+          all.find(
+            (x: any) =>
+              x && String(x.name || "") === up6Name && Number(x.rarity) === 6,
+          ) || all.find((x: any) => x && String(x.name || "") === up6Name);
+        if (found?.id) up6Id = String(found.id);
+      }
+
+      const entry: PoolInfoEntry = {
+        pool_id: poolId,
+        pool_gacha_type: String(pool.pool_gacha_type || ""),
+        pool_name: String(pool.pool_name || ""),
+        pool_type: String(pool.pool_type || ""),
+        up6_id: up6Id,
+      };
+      return entry;
+    } catch (e) {
+      console.error("[poolInfo] fetch content failed", { poolId, serverId }, e);
+      return null;
+    }
+  };
+
+  const ensurePoolInfoForPoolIds = async (params: {
+    provider: "hypergryph" | "gryphline";
+    serverId: string;
+    poolIds: string[];
+    lang: string;
+  }) => {
+    await loadPoolInfo();
+    if (!params.poolIds || params.poolIds.length <= 0) return;
+
+    const uniq = Array.from(new Set(params.poolIds.filter(Boolean)));
+    if (uniq.length <= 0) return;
+
+    let changed = false;
+    for (const poolId of uniq) {
+      const existing = poolInfoById.value[poolId];
+      if (existing?.up6_id) continue;
+
+      const entry = await fetchPoolInfoFromApi(
+        params.provider,
+        params.serverId,
+        poolId,
+        params.lang,
+      );
+      if (!entry) continue;
+
+      const idx = (poolInfo.value || []).findIndex((x) => x.pool_id === poolId);
+      if (idx >= 0) poolInfo.value.splice(idx, 1, entry);
+      else poolInfo.value.push(entry);
+      changed = true;
+    }
+
+    if (changed) await savePoolInfo();
+  };
+
   const getGachaUri = async (provider: "hypergryph" | "gryphline") => {
     await detectPlatform();
+    await loadPoolInfo();
     if (!isWindows.value) return "";
 
     const logPath =
@@ -68,7 +187,6 @@ export const useGachaSync = () => {
           `(https:\\/\\/ef-webview\\.${provider}\\.com\\/page\\/gacha_[^\\s]*)`,
         );
         const result = matchLine.match(urlRegex);
-        console.log(result?.[1])
         return result?.[1] || "";
       }
       return "";
@@ -281,6 +399,7 @@ export const useGachaSync = () => {
       const data = await invoke<any>(command, { uid });
       if (type === "char") charRecords.value = data || {};
       else weaponRecords.value = data || {};
+      if (type === "char") await loadPoolInfo();
     } catch (e) {
       console.error(e);
     }
@@ -387,6 +506,25 @@ export const useGachaSync = () => {
     } catch (error) {
       console.error(`Fetch error for ${JSON.stringify(extraParams)}:`, error);
     }
+
+    const isSpecialCharPool =
+      progress?.type === "char" && extraParams?.pool_type === SPECIAL_POOL_KEY;
+    if (isSpecialCharPool && allData.length > 0) {
+      const provider: "hypergryph" | "gryphline" = baseUrl.includes(
+        ".gryphline.com",
+      )
+        ? "gryphline"
+        : "hypergryph";
+      const poolIds = Array.from(
+        new Set(
+          (allData as any[])
+            .map((x) => String(x?.poolId || ""))
+            .filter(Boolean),
+        ),
+      );
+      await ensurePoolInfoForPoolIds({ provider, serverId, poolIds, lang });
+    }
+
     return allData;
   };
 
@@ -533,6 +671,7 @@ export const useGachaSync = () => {
     }
 
     await detectPlatform();
+    await loadPoolInfo();
     if (isSystemUid(uid) && !isWindows.value) {
       showToast(
         "同步失败",
@@ -647,9 +786,25 @@ export const useGachaSync = () => {
 
   const charStatistics = computed(() => {
     if (!charRecords.value) return [];
-    return Object.keys(charRecords.value).map((k) =>
-      analyzePoolData(k, charRecords.value[k]!),
-    );
+
+    const out: GachaStatistics[] = [];
+
+    for (const poolType of POOL_TYPES) {
+      const list = charRecords.value[poolType];
+      if (!list) continue;
+
+      if (poolType === SPECIAL_POOL_KEY) {
+        out.push(...analyzeSpecialPoolData(list, poolInfoById.value));
+      } else out.push(analyzePoolData(poolType, list));
+    }
+
+    // Fallback
+    for (const [k, list] of Object.entries(charRecords.value)) {
+      if ((POOL_TYPES as readonly string[]).includes(k)) continue;
+      out.push(analyzePoolData(k, list as any));
+    }
+
+    return out;
   });
 
   const weaponStatistics = computed(() => {

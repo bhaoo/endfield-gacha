@@ -100,12 +100,23 @@ export interface HistoryRecord {
   name: string;
   pity: number;
   isNew: boolean;
+  isFree?: boolean;
 }
 
 export interface GachaStatistics {
   poolName: string;
+  poolId?: string;
+  poolType?: string;
+  isCurrentPool?: boolean;
   totalPulls: number;
+  paidPulls?: number;
+  freePulls?: number;
   pityCount: number;
+  bigPityMax?: number;
+  bigPityCount?: number;
+  bigPityRemaining?: number;
+  up6Id?: string;
+  gotUp6?: boolean;
   count6: number;
   count5: number;
   count4: number;
@@ -121,4 +132,12 @@ export interface EndfieldGachaParams {
   lang: string;
   server: string;
   [key: string]: string | undefined;
+}
+
+export interface PoolInfoEntry {
+  pool_id: string;
+  pool_gacha_type: string;
+  pool_name: string;
+  pool_type: string;
+  up6_id: string;
 }

@@ -54,6 +54,17 @@ fn get_record_path(uid: &str) -> Result<PathBuf, String> {
     Ok(gacha_dir.join(format!("{}.json", uid)))
 }
 
+fn get_pool_info_path() -> Result<PathBuf, String> {
+    let root = get_userdata_dir()?;
+    let gacha_dir = root.join("gachaData");
+
+    if !gacha_dir.exists() {
+        fs::create_dir_all(&gacha_dir).map_err(|e| e.to_string())?;
+    }
+
+    Ok(gacha_dir.join("poolInfo.json"))
+}
+
 fn load_full_record(uid: &str) -> Result<serde_json::Value, String> {
     let file_path = get_record_path(uid)?;
     
@@ -324,6 +335,52 @@ fn read_weapon_records(uid: String) -> Result<serde_json::Value, String> {
 }
 
 #[command]
+fn read_pool_info() -> Result<serde_json::Value, String> {
+    let file_path = get_pool_info_path()?;
+
+    if !file_path.exists() {
+        let default_data = serde_json::json!([
+            {
+                "pool_gacha_type": "char",
+                "pool_id": "special_1_0_1",
+                "pool_name": "熔火灼痕",
+                "pool_type": "special",
+                "up6_id": "chr_0016_laevat"
+            },
+            {
+                "pool_gacha_type": "char",
+                "pool_id": "special_1_0_3",
+                "pool_name": "轻飘飘的信使",
+                "pool_type": "special",
+                "up6_id": "chr_0013_aglina"
+            }
+        ]);
+
+        let json_string =
+            serde_json::to_string_pretty(&default_data).map_err(|e| e.to_string())?;
+        fs::write(&file_path, json_string).map_err(|e| e.to_string())?;
+        return Ok(default_data);
+    }
+
+    let content = fs::read_to_string(&file_path).map_err(|e| e.to_string())?;
+    let data: serde_json::Value =
+        serde_json::from_str(&content).unwrap_or_else(|_| serde_json::json!([]));
+    if data.is_array() { Ok(data) } else { Ok(serde_json::json!([])) }
+}
+
+#[command]
+fn save_pool_info(data: serde_json::Value) -> Result<String, String> {
+    let file_path = get_pool_info_path()?;
+    if !data.is_array() {
+        return Err("poolInfo must be a JSON array".into());
+    }
+
+    let json_string = serde_json::to_string_pretty(&data).map_err(|e| e.to_string())?;
+    fs::write(file_path, json_string).map_err(|e| e.to_string())?;
+    Ok("poolInfo saved".into())
+}
+
+#[command]
 fn get_os() -> String {
     std::env::consts::OS.to_string()
 }
@@ -342,6 +399,8 @@ pub fn run() {
             read_char_records,
             save_weapon_records,
             read_weapon_records,
+            read_pool_info,
+            save_pool_info,
             get_os,
             open_login_window
         ])
