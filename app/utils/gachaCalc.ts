@@ -156,6 +156,7 @@ export const analyzeSpecialPoolData = (
         pity: globalSmallPity,
         isNew: item.isNew,
         isFree,
+        isUp: !!current.up6Id && item.charId === current.up6Id,
       });
 
       if (current.up6Id && item.charId === current.up6Id) current.gotUp6 = true;

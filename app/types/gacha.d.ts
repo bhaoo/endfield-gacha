@@ -102,6 +102,7 @@ export interface HistoryRecord {
   pity: number;
   isNew: boolean;
   isFree?: boolean;
+  isUp?: boolean;
 }
 
 export interface GachaStatistics {
