@@ -37,7 +37,7 @@
 
 - **增量追加**：按 `seqId` 去重合并，重复同步不会重复写入，只会追加缺失记录。
 - **角色池 / 武器池**：支持角色池与武器池寻访记录同步与统计展示。
-- **数据本地保存**：所有数据均保存到应用同级目录的 `userData/` 下（不上传任何第三方服务器）。
+- **数据本地保存**：所有数据均保存到本地 `userData/` 下（不同系统路径不同；不上传任何第三方服务器）。
   - 配置文件：`userData/config.json`
   - 寻访记录数据：`userData/gachaData/*.json`
 
@@ -69,13 +69,13 @@
 2. 下载最新版本中与你系统对应的安装包（Windows / macOS / Linux）。
    - Windows 可以直接下载便携版（Endfield_Gacha_Portable.exe）
    - Linux 推荐通过 `deb` 方式安装（通过 `AppImage` 安装可能因为 GLib 版本问题导致打开白屏）
-4. 运行即可（请确保应用所在目录具备写入权限，以便创建/写入 `userData/`）。
+4. 运行即可（Windows 便携版请确保应用所在目录具备写入权限，以便创建/写入 `userData/`）。
 
 ## 数据存储位置
 
 - **Windows**:  `exe` 同级目录下的 `userData/` 目录中。
-- **macOS**: `/Applications/Endfield_Gacha.app/Contents/MacOS/userData/`。
-- **Linux**: `/home/<user>/.local/share/com.bhao.endfieldgacha/userData/`
+- **macOS**: `~/Library/Application Support/com.bhao.endfieldgacha/userData/`
+- **Linux**: `~/.local/share/com.bhao.endfieldgacha/userData/`
 
 ## 使用说明
 

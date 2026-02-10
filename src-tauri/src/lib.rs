@@ -1,15 +1,25 @@
 use std::env;
 use std::fs;
 use std::path::PathBuf;
+use std::sync::OnceLock;
 use std::{thread, time::Duration};
 use tauri::command;
 use tauri::{AppHandle, Manager, WebviewWindowBuilder, WebviewUrl, Emitter, WindowEvent};
 
 #[cfg(target_os = "linux")]
-const TAURI_IDENTIFIER: &str = "com.bhao.endfieldgacha";
+const APP_IDENTIFIER: &str = "com.bhao.endfieldgacha";
+
+static USERDATA_DIR: OnceLock<PathBuf> = OnceLock::new();
+
+fn get_userdata_dir() -> Result<PathBuf, String> {
+    if let Some(dir) = USERDATA_DIR.get() {
+        return Ok(dir.clone());
+    }
+    get_userdata_dir_fallback()
+}
 
 #[cfg(target_os = "linux")]
-fn get_userdata_dir() -> Result<PathBuf, String> {
+fn get_userdata_dir_fallback() -> Result<PathBuf, String> {
     let data_home = if let Some(path) = env::var_os("XDG_DATA_HOME") {
         PathBuf::from(path)
     } else if let Some(home) = env::var_os("HOME") {
@@ -18,7 +28,7 @@ fn get_userdata_dir() -> Result<PathBuf, String> {
         return Err("Unable to resolve data directory (XDG_DATA_HOME/HOME not set)".to_string());
     };
 
-    let userdata_dir = data_home.join(TAURI_IDENTIFIER).join("userData");
+    let userdata_dir = data_home.join(APP_IDENTIFIER).join("userData");
 
     if !userdata_dir.exists() {
         fs::create_dir_all(&userdata_dir).map_err(|e| e.to_string())?;
@@ -26,8 +36,13 @@ fn get_userdata_dir() -> Result<PathBuf, String> {
     Ok(userdata_dir)
 }
 
-#[cfg(not(target_os = "linux"))]
-fn get_userdata_dir() -> Result<PathBuf, String> {
+#[cfg(target_os = "macos")]
+fn get_userdata_dir_fallback() -> Result<PathBuf, String> {
+    Err("userData dir not initialized (expected to be set in Tauri setup on macOS)".into())
+}
+
+#[cfg(all(not(target_os = "linux"), not(target_os = "macos")))]
+fn get_userdata_dir_fallback() -> Result<PathBuf, String> {
     let exe_path = env::current_exe().map_err(|e| e.to_string())?;
     let exe_dir = exe_path.parent().ok_or("Unable to find exe directory")?;
     let userdata_dir = exe_dir.join("userData");
@@ -36,6 +51,25 @@ fn get_userdata_dir() -> Result<PathBuf, String> {
         fs::create_dir_all(&userdata_dir).map_err(|e| e.to_string())?;
     }
     Ok(userdata_dir)
+}
+
+#[cfg(any(target_os = "linux", target_os = "macos"))]
+fn init_userdata_dir(app: &AppHandle) -> Result<(), String> {
+    if USERDATA_DIR.get().is_some() {
+        return Ok(());
+    }
+
+    let app_data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+    let userdata_dir = app_data_dir.join("userData");
+
+    if !userdata_dir.exists() {
+        fs::create_dir_all(&userdata_dir).map_err(|e| e.to_string())?;
+    }
+
+    USERDATA_DIR
+        .set(userdata_dir)
+        .map_err(|_| "Unable to set userData directory".to_string())?;
+    Ok(())
 }
 
 fn get_config_path() -> Result<PathBuf, String> {
@@ -405,6 +439,10 @@ pub fn run() {
             open_login_window
         ])
         .setup(|app| {
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
+            init_userdata_dir(&app.handle())
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+
             if cfg!(debug_assertions) {
                 app.handle().plugin(
                     tauri_plugin_log::Builder::default()
