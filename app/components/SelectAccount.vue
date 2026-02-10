@@ -21,7 +21,8 @@ onMounted(async () => {
   await loadConfig()
 
   if (!isWindows.value && isSystemUid(uid.value)) {
-    if ( currentUser.value && uidList.value.includes(currentUser.value) ) {
+    const exists = uidList.value.some((x) => x.value === currentUser.value)
+    if (currentUser.value && exists) {
       uid.value = currentUser.value
     } else {
       uid.value = 'none'

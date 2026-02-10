@@ -11,7 +11,7 @@ export const useUserStore = () => {
   const userList = useState<User[]>("global-user-list", () => []);
   const { isWindows } = usePlatform();
   const updateSeenVersion = useState<string>("global-update-seen-version", () => "");
-  const currentUser = useState<string>("global-current-user", () => "none");
+  const currentUser = useState<string>("current-uid", () => "none");
   const savabled = useState<boolean>("global-savabled", () => false);
 
   const getUserKey = (u: User) =>
