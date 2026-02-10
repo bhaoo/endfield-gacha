@@ -4,14 +4,12 @@ on:
   push:
     branches:
       - test
-  workflow_dispatch:
 
 jobs:
   test-tauri:
     permissions:
       contents: write
     strategy:
-      fail-fast: false
       matrix:
         include:
           - platform: 'macos-latest'
@@ -20,12 +18,6 @@ jobs:
           - platform: 'macos-latest'
             args: '--target x86_64-apple-darwin'
             arch: 'macos-intel'
-          - platform: 'ubuntu-22.04'
-            arch: 'ubuntu-deb'
-            args: ''
-          - platform: 'windows-latest'
-            args: ''
-            arch: 'windows-exe'
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -41,11 +33,6 @@ jobs:
         with:
           targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
 
-      - name: install dependencies (ubuntu only)
-        if: matrix.platform == 'ubuntu-22.04'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
       - name: install frontend dependencies
         uses: pnpm/action-setup@v4
         with:
@@ -57,28 +44,39 @@ jobs:
         shell: bash
         run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
-      - uses: tauri-apps/tauri-action@v0
+      - name: Import Apple Developer Certificate
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          echo $APPLE_CERTIFICATE | base64 --decode > certificate.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          security find-identity -v -p codesigning build.keychain
+
+      - name: Create Key File
+        run: |
+          mkdir -p ~/private_keys
+          echo "${{ secrets.APPLE_KEY }}" > ~/private_keys/AuthKey_${{ secrets.APPLE_KEY_ID }}.p8
+
+      - name: Build and Notarize
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_KEY_ID }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY_PATH: /Users/runner/private_keys/AuthKey_${{ secrets.APPLE_KEY_ID }}.p8
         with:
           tagName: ${{ steps.get_version.outputs.VERSION }}
           releaseName: "v${{ steps.get_version.outputs.VERSION }}"
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
-
-      - name: Prepare Windows Portable
-        if: matrix.platform == 'windows-latest'
-        shell: bash
-        run: |
-          cd src-tauri/target/release
-          mv *.exe Endfield_Gacha_Portable_${{ steps.get_version.outputs.VERSION }}.exe
-      - name: Upload Windows Portable
-        if: matrix.platform == 'windows-latest'
-        uses: softprops/action-gh-release@v1
-        with:
-          draft: true
-          prerelease: false
-          token: ${{ secrets.GITHUB_TOKEN }}
-          tag_name: ${{ steps.get_version.outputs.VERSION }}
-          files: src-tauri/target/release/Endfield_Gacha_Portable_${{ steps.get_version.outputs.VERSION }}.exe
