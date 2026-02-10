@@ -1,6 +1,6 @@
 [package]
 name = "Endfield_Gacha"
-version = "0.4.4"
+version = "0.5.0"
 description = "A tool for tracking statistics and analyzing recruitment (gacha) records in Arknights: Endfield."
 authors = ["Bhao"]
 license = "MIT"
