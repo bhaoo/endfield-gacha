@@ -6,7 +6,7 @@ on:
       - release
 
 jobs:
-  test-tauri:
+  release-tauri:
     name: Build ${{ matrix.arch }}
     permissions:
       contents: write
@@ -30,6 +30,15 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Mask NAME_KEY (macos only)
+        if: matrix.platform == 'macos-latest'
+        env:
+          NAME_KEY: ${{ secrets.KEY }}
+          NAME_KEY_ID: ${{ secrets.KEY_ID }}
+        run: |
+          echo "::add-mask::$NAME_KEY"
+          echo "::add-mask::$NAME_KEY_ID"
 
       - name: setup node
         uses: actions/setup-node@v4
@@ -58,7 +67,31 @@ jobs:
         shell: bash
         run: echo "VERSION=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
 
-      - uses: tauri-apps/tauri-action@v0
+      - name: Import Apple Developer Certificate (macos only)
+        if: matrix.platform == 'macos-latest'
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          echo $APPLE_CERTIFICATE | base64 --decode > certificate.p12
+          security create-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" build.keychain
+          security set-keychain-settings -t 3600 -u build.keychain
+          security import certificate.p12 -k build.keychain -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" build.keychain
+          security find-identity -v -p codesigning build.keychain
+
+      - name: Create Key File (macos only)
+        if: matrix.platform == 'macos-latest'
+        run: |
+          mkdir -p ~/private_keys
+          echo "${{ secrets.APPLE_KEY }}" > ~/private_keys/AuthKey_${{ secrets.APPLE_KEY_ID }}.p8
+
+      - name: Build (non-macos)
+        if: matrix.platform != 'macos-latest'
+        uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
@@ -68,14 +101,32 @@ jobs:
           prerelease: false
           args: ${{ matrix.args }}
 
-      - name: Prepare Windows Portable
+      - name: Build and Notarize (macos only)
+        if: matrix.platform == 'macos-latest'
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_KEY_ID }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_API_KEY_PATH: /Users/runner/private_keys/AuthKey_${{ secrets.APPLE_KEY_ID }}.p8
+        with:
+          tagName: ${{ steps.get_version.outputs.VERSION }}
+          releaseName: "v${{ steps.get_version.outputs.VERSION }}"
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+
+      - name: Prepare Windows Portable (windows only)
         if: matrix.platform == 'windows-latest'
         shell: bash
         run: |
           cd src-tauri/target/release
-          mv *.exe Endfield_Gacha_Portable_${{ steps.get_version.outputs.VERSION }}.exe
+          mv *.exe "Endfield Gacha_Portable_${{ steps.get_version.outputs.VERSION }}.exe"
 
-      - name: Upload Windows Portable
+      - name: Upload Windows Portable (windows only)
         if: matrix.platform == 'windows-latest'
         uses: softprops/action-gh-release@v1
         with:
@@ -83,4 +134,4 @@ jobs:
           prerelease: false
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ steps.get_version.outputs.VERSION }}
-          files: src-tauri/target/release/Endfield_Gacha_Portable_${{ steps.get_version.outputs.VERSION }}.exe
+          files: "src-tauri/target/release/Endfield Gacha_Portable_${{ steps.get_version.outputs.VERSION }}.exe"

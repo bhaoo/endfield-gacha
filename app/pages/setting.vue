@@ -67,7 +67,7 @@
             </ULink>
           </p>
           <p>
-            本项目不会采集或上传任何个人隐私，数据仅保存在本地 <code class="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800">userData/</code>，不会上传到任何第三方服务，涉及的游戏数据均由用户自行选择导入/导出。
+            本项目不会采集或上传任何个人隐私，数据仅保存在本地 <code class="px-1 py-0.5 rounded bg-gray-100 dark:bg-gray-800">userData/</code>（不同系统路径不同，详见 README），不会上传到任何第三方服务，涉及的游戏数据均由用户自行选择导入/导出。
           </p>
         </div>
 

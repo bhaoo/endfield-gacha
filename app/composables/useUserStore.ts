@@ -3,13 +3,16 @@ import type { AppConfig, User } from "~/types/gacha";
 import {
   isSystemUid,
   systemUidLabel,
-  SYSTEM_UID_AUTO,
+  SYSTEM_UID_CN,
+  SYSTEM_UID_GLOBAL,
 } from "~/utils/systemAccount";
 
 export const useUserStore = () => {
   const userList = useState<User[]>("global-user-list", () => []);
   const { isWindows } = usePlatform();
   const updateSeenVersion = useState<string>("global-update-seen-version", () => "");
+  const currentUser = useState<string>("current-uid", () => "none");
+  const savabled = useState<boolean>("global-savabled", () => false);
 
   const getUserKey = (u: User) =>
     u.key || (u.roleId?.roleId ? `${u.uid}_${u.roleId.roleId}` : u.uid);
@@ -18,7 +21,8 @@ export const useUserStore = () => {
     [
       ...(isWindows.value
         ? [
-            { label: systemUidLabel(SYSTEM_UID_AUTO), value: SYSTEM_UID_AUTO },
+            { label: systemUidLabel(SYSTEM_UID_CN), value: SYSTEM_UID_CN },
+            { label: systemUidLabel(SYSTEM_UID_GLOBAL), value: SYSTEM_UID_GLOBAL },
           ]
         : []),
       ...userList.value
@@ -40,6 +44,7 @@ export const useUserStore = () => {
   );
 
   const loadConfig = async () => {
+    savabled.value = false;
     try {
       await usePlatform().detect();
       const config = await invoke<AppConfig>("read_config");
@@ -52,6 +57,10 @@ export const useUserStore = () => {
           }))
         : [];
 
+      if (config.currentUser) {
+        currentUser.value = config.currentUser;
+      }
+
       const savedTheme = config.theme || "system";
       currentTheme.value = savedTheme;
       colorMode.preference = savedTheme;
@@ -62,13 +71,20 @@ export const useUserStore = () => {
       userList.value = [];
       currentTheme.value = "system";
       updateSeenVersion.value = "";
+    } finally {
+      savabled.value = true;
     }
   };
 
   const saveConfig = async (): Promise<boolean> => {
+    if (!savabled.value) {
+      console.log("当前状态不允许保存配置");
+      return false;
+    }
     try {
       const configData: AppConfig = {
         users: toRaw(userList.value),
+        currentUser: currentUser.value,
         theme: currentTheme.value,
         updateSeenVersion: updateSeenVersion.value || "",
       };
@@ -80,6 +96,12 @@ export const useUserStore = () => {
       return false;
     }
   };
+
+  watch(currentUser, async (newVal, oldVal) => {
+    if (newVal !== oldVal) {
+      await saveConfig();
+    }
+  });
 
   const setTheme = async (newTheme: "system" | "light" | "dark") => {
     if (currentTheme.value === newTheme) return;
@@ -115,11 +137,12 @@ export const useUserStore = () => {
   return {
     userList,
     uidList,
+    currentUser,
     loadConfig,
     addUser,
     updateSeenVersion,
     setUpdateSeenVersion,
     currentTheme,
-    setTheme
+    setTheme,
   };
 };
