@@ -36,7 +36,7 @@ export const useGachaPoolInfo = (params: { userAgent: Ref<string> }) => {
     }
   };
 
-  const fetchPoolInfoFromApi = async (
+  const fetchCharPoolInfoFromApi = async (
     provider: "hypergryph" | "gryphline",
     serverId: string,
     poolId: string,
@@ -84,7 +84,63 @@ export const useGachaPoolInfo = (params: { userAgent: Ref<string> }) => {
     }
   };
 
-  const ensurePoolInfoForPoolIds = async (p: {
+  const fetchWeaponPoolInfoFromApi = async (p: {
+    provider: "hypergryph" | "gryphline";
+    serverId: string;
+    poolId: string;
+    lang: string;
+  }): Promise<PoolInfoEntry | null> => {
+    try {
+      const effectiveServerId = p.provider === "hypergryph" ? "1" : p.serverId;
+      const query = new URLSearchParams({
+        lang: p.lang,
+        pool_id: p.poolId,
+        server_id: effectiveServerId,
+      });
+      const url = `https://ef-webview.${p.provider}.com/api/content?${query.toString()}`;
+      const res = await fetch(url, {
+        method: "GET",
+        headers: { "User-Agent": params.userAgent.value },
+      });
+      if (!res.ok) return null;
+
+      const json: any = await res.json();
+      const pool = json?.code === 0 ? json?.data?.pool : null;
+      if (!pool) return null;
+
+      const up6Name = String(pool.up6_name || "").trim();
+      const all = Array.isArray(pool.all) ? pool.all : [];
+      let up6Id = "";
+      if (up6Name) {
+        const found =
+          all.find(
+            (x: any) =>
+              x && String(x.name || "") === up6Name && Number(x.rarity) === 6,
+          ) || all.find((x: any) => x && String(x.name || "") === up6Name);
+        if (found?.id) up6Id = String(found.id);
+      }
+
+      const isConstant = String(p.poolId).toLowerCase().includes("constant");
+
+      const entry: PoolInfoEntry = {
+        pool_gacha_type: String(pool.pool_gacha_type || "weapon"),
+        pool_id: p.poolId,
+        pool_name: String(pool.pool_name || ""),
+        pool_type: isConstant ? "constant" : "special",
+        up6_id: up6Id,
+      };
+      return entry;
+    } catch (e) {
+      console.error(
+        "[poolInfo] fetch weapon pool content failed",
+        { poolId: p.poolId, serverId: p.serverId },
+        e,
+      );
+      return null;
+    }
+  };
+
+  const ensureCharPoolInfoForPoolIds = async (p: {
     provider: "hypergryph" | "gryphline";
     serverId: string;
     poolIds: string[];
@@ -101,7 +157,7 @@ export const useGachaPoolInfo = (params: { userAgent: Ref<string> }) => {
       const existing = poolInfoById.value[poolId];
       if (existing?.up6_id) continue;
 
-      const entry = await fetchPoolInfoFromApi(
+      const entry = await fetchCharPoolInfoFromApi(
         p.provider,
         p.serverId,
         poolId,
@@ -118,11 +174,43 @@ export const useGachaPoolInfo = (params: { userAgent: Ref<string> }) => {
     if (changed) await savePoolInfo();
   };
 
+  const ensureWeaponPoolInfoForPoolId = async (p: {
+    provider: "hypergryph" | "gryphline";
+    serverId: string;
+    poolId: string;
+    lang: string;
+  }) => {
+    await loadPoolInfo();
+    const poolId = String(p.poolId || "").trim();
+    if (!poolId) return;
+
+    const existing = (poolInfo.value || []).find(
+      (x) => x?.pool_id === poolId && x?.pool_gacha_type === "weapon",
+    );
+    if (existing) return;
+
+    const entry = await fetchWeaponPoolInfoFromApi({
+      provider: p.provider,
+      serverId: p.serverId,
+      poolId,
+      lang: p.lang,
+    });
+    if (!entry) return;
+
+    const idx = (poolInfo.value || []).findIndex(
+      (x) => x?.pool_id === poolId && x?.pool_gacha_type === "weapon",
+    );
+    if (idx >= 0) poolInfo.value.splice(idx, 1, entry);
+    else poolInfo.value.push(entry);
+
+    await savePoolInfo();
+  };
+
   return {
     poolInfo,
     poolInfoById,
     loadPoolInfo,
-    ensurePoolInfoForPoolIds,
+    ensureCharPoolInfoForPoolIds,
+    ensureWeaponPoolInfoForPoolId,
   };
 };
-

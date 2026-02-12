@@ -15,10 +15,16 @@ export const createGachaApi = (deps: {
     poolName: string;
     page: number;
   }>;
-  ensurePoolInfoForPoolIds: (p: {
+  ensureCharPoolInfoForPoolIds: (p: {
     provider: "hypergryph" | "gryphline";
     serverId: string;
     poolIds: string[];
+    lang: string;
+  }) => Promise<void>;
+  ensureWeaponPoolInfoForPoolId: (p: {
+    provider: "hypergryph" | "gryphline";
+    serverId: string;
+    poolId: string;
     lang: string;
   }) => Promise<void>;
   saveUserData: (
@@ -39,6 +45,20 @@ export const createGachaApi = (deps: {
     let nextSeqId = "";
     let hasMore = true;
     let page = 0;
+
+    const provider: "hypergryph" | "gryphline" = baseUrl.includes(".gryphline.com")
+      ? "gryphline"
+      : "hypergryph";
+
+    const weaponPoolId = String(extraParams?.pool_id || "").trim();
+    if (progress?.type === "weapon" && weaponPoolId) {
+      await deps.ensureWeaponPoolInfoForPoolId({
+        provider,
+        serverId,
+        poolId: weaponPoolId,
+        lang,
+      });
+    }
 
     try {
       while (hasMore) {
@@ -85,11 +105,6 @@ export const createGachaApi = (deps: {
     const isSpecialCharPool =
       progress?.type === "char" && extraParams?.pool_type === SPECIAL_POOL_KEY;
     if (isSpecialCharPool && allData.length > 0) {
-      const provider: "hypergryph" | "gryphline" = baseUrl.includes(
-        ".gryphline.com",
-      )
-        ? "gryphline"
-        : "hypergryph";
       const poolIds = Array.from(
         new Set(
           (allData as any[])
@@ -97,7 +112,12 @@ export const createGachaApi = (deps: {
             .filter(Boolean),
         ),
       );
-      await deps.ensurePoolInfoForPoolIds({ provider, serverId, poolIds, lang });
+      await deps.ensureCharPoolInfoForPoolIds({
+        provider,
+        serverId,
+        poolIds,
+        lang,
+      });
     }
 
     return allData;
@@ -178,4 +198,3 @@ export const createGachaApi = (deps: {
     syncWeapons,
   };
 };
-

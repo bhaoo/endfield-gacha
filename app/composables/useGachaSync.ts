@@ -42,7 +42,13 @@ export const useGachaSync = () => {
     });
   };
 
-  const { poolInfoById, loadPoolInfo, ensurePoolInfoForPoolIds } =
+  const {
+    poolInfo,
+    poolInfoById,
+    loadPoolInfo,
+    ensureCharPoolInfoForPoolIds,
+    ensureWeaponPoolInfoForPoolId,
+  } =
     useGachaPoolInfo({ userAgent: user_agent });
 
   const { charRecords, weaponRecords, loadUserData, saveUserData } =
@@ -66,7 +72,8 @@ export const useGachaSync = () => {
   const { syncCharacters, syncWeapons } = createGachaApi({
     userAgent: user_agent,
     syncProgress,
-    ensurePoolInfoForPoolIds,
+    ensureCharPoolInfoForPoolIds,
+    ensureWeaponPoolInfoForPoolId,
     saveUserData,
   });
 
@@ -74,6 +81,7 @@ export const useGachaSync = () => {
     charRecords,
     weaponRecords,
     poolInfoById,
+    poolInfo,
   });
 
   const handleSync = async (uid: string, type: "char" | "weapon" = "char") => {

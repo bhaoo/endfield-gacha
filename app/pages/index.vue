@@ -74,7 +74,7 @@
                 [NEW]
               </span>
 
-              <svg width="20" height="20" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" v-if="!rec.isUp"
+              <svg width="20" height="20" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" v-if="selectedSpecialStat.up6Id && !rec.isUp"
                 class="absolute -top-2 -right-2 select-none">
                 <circle cx="150" cy="150" r="140" fill="oklch(55.1% 0.027 264.364)" />
                 <text x="50%" y="50%"

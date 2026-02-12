@@ -45,7 +45,7 @@
 
           <div v-if="stat.history6.length > 0" class="flex flex-wrap gap-2">
             <div v-for="(rec, idx) in [...stat.history6].reverse()" :key="idx"
-              class="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 flex items-center gap-1">
+              class="relative text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 flex items-center gap-1">
               <span class="font-medium text-gray-700 dark:text-gray-200">
                 {{ rec.name }}
               </span>
@@ -55,6 +55,16 @@
               <span v-if="rec.isNew" class="text-red-500 font-bold ml-0.5 text-[10px]">
                 [NEW]
               </span>
+
+              <svg width="20" height="20" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg"
+                v-if="stat.up6Id && !rec.isUp" class="absolute -top-2 -right-2 select-none">
+                <circle cx="150" cy="150" r="140" fill="oklch(55.1% 0.027 264.364)" />
+                <text x="50%" y="50%" transform="rotate(15, 150, 150)"
+                  font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif"
+                  font-weight="bold" font-size="180" text-anchor="middle" dominant-baseline="central" fill="white">
+                  歪
+                </text>
+              </svg>
             </div>
           </div>
 

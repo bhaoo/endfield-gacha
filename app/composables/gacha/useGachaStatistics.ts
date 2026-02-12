@@ -17,6 +17,7 @@ export const useGachaStatistics = (params: {
   charRecords: Ref<Record<string, EndFieldCharInfo[]>>;
   weaponRecords: Ref<Record<string, EndFieldWeaponInfo[]>>;
   poolInfoById: ComputedRef<Record<string, PoolInfoEntry>>;
+  poolInfo: Ref<PoolInfoEntry[]>;
 }) => {
   const charStatistics = computed(() => {
     if (!params.charRecords.value) return [];
@@ -43,11 +44,20 @@ export const useGachaStatistics = (params: {
 
   const weaponStatistics = computed(() => {
     if (!params.weaponRecords.value) return [];
+
+    const weaponUp6ByPoolId: Record<string, string> = {};
+    for (const it of params.poolInfo.value || []) {
+      if (!it) continue;
+      if (it.pool_gacha_type !== "weapon") continue;
+      if (!it.pool_id) continue;
+      if (!it.up6_id) continue;
+      weaponUp6ByPoolId[it.pool_id] = it.up6_id;
+    }
+
     return Object.keys(params.weaponRecords.value).map((k) =>
-      analyzeWeaponPoolData(k, params.weaponRecords.value[k]!),
+      analyzeWeaponPoolData(k, params.weaponRecords.value[k]!, weaponUp6ByPoolId[k]),
     );
   });
 
   return { charStatistics, weaponStatistics };
 };
-
