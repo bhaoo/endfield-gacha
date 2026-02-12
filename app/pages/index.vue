@@ -22,7 +22,11 @@
 
       <div class="absolute top-18 right-3 flex flex-col gap-1">
         <UBadge variant="outline">当前已垫: {{ selectedSpecialStat.pityCount }} 抽</UBadge>
-        <UBadge v-if="selectedSpecialStat.bigPityRemaining !== undefined"
+        <UBadge
+          v-if="
+            selectedSpecialStat.bigPityRemaining !== undefined &&
+            selectedSpecialStat.bigPityMax !== undefined
+          "
           :variant="(selectedSpecialStat.gotUp6) ? 'solid' : 'outline'">
           <span v-if="selectedSpecialStat.gotUp6">已获得当期 UP</span>
           <span v-else>大保底: {{ selectedSpecialStat.bigPityMax - selectedSpecialStat.bigPityRemaining }} / {{

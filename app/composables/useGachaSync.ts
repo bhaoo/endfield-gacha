@@ -1,26 +1,6 @@
-import { fetch } from "@tauri-apps/plugin-http";
 import { invoke } from "@tauri-apps/api/core";
-import { readTextFile, BaseDirectory } from "@tauri-apps/plugin-fs";
-import type {
-  AppConfig,
-  EndFieldCharInfo,
-  EndFieldWeaponInfo,
-  GachaStatistics,
-  GachaItem,
-  PoolInfoEntry,
-  User,
-  UserRole,
-} from "~/types/gacha";
-import {
-  analyzePoolData,
-  analyzeSpecialPoolData,
-  analyzeWeaponPoolData,
-  delay,
-  POOL_TYPES,
-  POOL_NAME_MAP,
-  parseGachaParams,
-  SPECIAL_POOL_KEY,
-} from "~/utils/gachaCalc";
+import type { AppConfig } from "~/types/gacha";
+import type { GachaAuth } from "~/composables/gacha";
 import {
   isSystemUid,
   systemUidLabel,
@@ -36,312 +16,24 @@ export const useGachaSync = () => {
   const isSyncing = ref(false);
   const { isWindows, detect: detectPlatform } = usePlatform();
   const { addUser } = useUserStore();
+
   type SyncProgress = {
     type: "char" | "weapon" | null;
     poolName: string;
     page: number;
   };
+
   const syncProgress = useState<SyncProgress>("gacha-sync-progress", () => ({
     type: null,
     poolName: "",
     page: 0,
   }));
+
   const user_agent = ref(
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.112 Safari/537.36",
   );
+
   const currentUid = useState<string>("current-uid", () => "none");
-
-  const poolInfoLoaded = ref(false);
-  const poolInfo = useState<PoolInfoEntry[]>("gacha-pool-info", () => []);
-  const poolInfoById = computed(() => {
-    const map: Record<string, PoolInfoEntry> = {};
-    for (const it of poolInfo.value || []) {
-      if (it && typeof it.pool_id === "string" && it.pool_id)
-        map[it.pool_id] = it;
-    }
-    return map;
-  });
-
-  const loadPoolInfo = async () => {
-    if (poolInfoLoaded.value) return;
-    try {
-      const data = await invoke<any>("read_pool_info");
-      poolInfo.value = Array.isArray(data) ? (data as PoolInfoEntry[]) : [];
-    } catch (e) {
-      console.error("[poolInfo] read_pool_info failed", e);
-      poolInfo.value = [];
-    } finally {
-      poolInfoLoaded.value = true;
-    }
-  };
-
-  const savePoolInfo = async () => {
-    try {
-      await invoke("save_pool_info", { data: poolInfo.value });
-    } catch (e) {
-      console.error("[poolInfo] save_pool_info failed", e);
-    }
-  };
-
-  const fetchPoolInfoFromApi = async (
-    provider: "hypergryph" | "gryphline",
-    serverId: string,
-    poolId: string,
-    lang: string,
-  ): Promise<PoolInfoEntry | null> => {
-    try {
-      const query = new URLSearchParams({
-        lang,
-        pool_id: poolId,
-        server_id: serverId,
-      });
-      const url = `https://ef-webview.${provider}.com/api/content?${query.toString()}`;
-      const res = await fetch(url, {
-        method: "GET",
-        headers: { "User-Agent": user_agent.value },
-      });
-      if (!res.ok) return null;
-      const json: any = await res.json();
-      const pool = json?.code === 0 ? json?.data?.pool : null;
-      if (!pool) return null;
-
-      const up6Name = String(pool.up6_name || "").trim();
-      const all = Array.isArray(pool.all) ? pool.all : [];
-      let up6Id = "";
-      if (up6Name) {
-        const found =
-          all.find(
-            (x: any) =>
-              x && String(x.name || "") === up6Name && Number(x.rarity) === 6,
-          ) || all.find((x: any) => x && String(x.name || "") === up6Name);
-        if (found?.id) up6Id = String(found.id);
-      }
-
-      const entry: PoolInfoEntry = {
-        pool_id: poolId,
-        pool_gacha_type: String(pool.pool_gacha_type || ""),
-        pool_name: String(pool.pool_name || ""),
-        pool_type: String(pool.pool_type || ""),
-        up6_id: up6Id,
-      };
-      return entry;
-    } catch (e) {
-      console.error("[poolInfo] fetch content failed", { poolId, serverId }, e);
-      return null;
-    }
-  };
-
-  const ensurePoolInfoForPoolIds = async (params: {
-    provider: "hypergryph" | "gryphline";
-    serverId: string;
-    poolIds: string[];
-    lang: string;
-  }) => {
-    await loadPoolInfo();
-    if (!params.poolIds || params.poolIds.length <= 0) return;
-
-    const uniq = Array.from(new Set(params.poolIds.filter(Boolean)));
-    if (uniq.length <= 0) return;
-
-    let changed = false;
-    for (const poolId of uniq) {
-      const existing = poolInfoById.value[poolId];
-      if (existing?.up6_id) continue;
-
-      const entry = await fetchPoolInfoFromApi(
-        params.provider,
-        params.serverId,
-        poolId,
-        params.lang,
-      );
-      if (!entry) continue;
-
-      const idx = (poolInfo.value || []).findIndex((x) => x.pool_id === poolId);
-      if (idx >= 0) poolInfo.value.splice(idx, 1, entry);
-      else poolInfo.value.push(entry);
-      changed = true;
-    }
-
-    if (changed) await savePoolInfo();
-  };
-
-  const getGachaUri = async (provider: "hypergryph" | "gryphline") => {
-    await detectPlatform();
-    await loadPoolInfo();
-    if (!isWindows.value) return "";
-
-    const logPath =
-      provider === "gryphline"
-        ? "AppData/LocalLow/Gryphline/Endfield/sdklogs/HGWebview.log"
-        : "AppData/LocalLow/Hypergryph/Endfield/sdklogs/HGWebview.log";
-    const targetPrefix = `https://ef-webview.${provider}.com/page/gacha_`;
-    try {
-      const content = await readTextFile(logPath, {
-        baseDir: BaseDirectory.Home,
-      });
-      const lines = content.split(/\r?\n/).reverse();
-      const matchLine = lines.find((line) => line.includes(targetPrefix));
-
-      if (matchLine) {
-        const urlRegex = new RegExp(
-          `(https:\\/\\/ef-webview\\.${provider}\\.com\\/page\\/gacha_[^\\s]*)`,
-        );
-        const result = matchLine.match(urlRegex);
-        return result?.[1] || "";
-      }
-      return "";
-    } catch (err) {
-      console.error(`[日志读取失败] provider=${provider}`, err);
-      return "";
-    }
-  };
-
-  type GachaAuth = {
-    u8Token: string;
-    provider: "hypergryph" | "gryphline";
-    serverId: string;
-  };
-
-  type SystemGachaAuth = GachaAuth & {
-    detectedUid: string;
-    detectedRoleId: string;
-    detectedUserKey: string;
-    channelLabel: string;
-    roleName: string;
-    serverName: string;
-  };
-
-  const inferChannelLabel = (params: {
-    channel?: string;
-    subChannel?: string;
-  }): "官服" | "B服" | "未知渠道" => {
-    const channel = String(params.channel ?? "");
-    const subChannel = String(params.subChannel ?? "");
-    if (channel === "1" && subChannel === "1") return "官服";
-    if (channel === "2" && subChannel === "2") return "B服";
-    return "未知渠道";
-  };
-
-  const queryUidRoleFromU8Token = async (
-    provider: "hypergryph" | "gryphline",
-    u8Token: string,
-    serverId: string,
-  ): Promise<{
-    uid: string;
-    roleId: string;
-    roleName: string;
-    serverName: string;
-  }> => {
-    const res = await fetch(
-      `https://u8.${provider}.com/game/role/v1/query_role_list`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json;charset=UTF-8",
-          "User-Agent": user_agent.value,
-        },
-        body: JSON.stringify({ token: u8Token, serverId }),
-      },
-    );
-
-    if (!res.ok) {
-      throw new Error(`query_role_list 请求失败: ${res.status}`);
-    }
-
-    const json = await res.json();
-    if (json?.status !== 0) {
-      throw new Error(`query_role_list 返回异常: ${json?.msg || "unknown"}`);
-    }
-
-    const uid = String(json?.data?.uid ?? "").trim();
-    const roles = Array.isArray(json?.data?.roles) ? json.data.roles : [];
-    const role =
-      roles.find((r: any) => String(r?.serverId ?? "") === String(serverId)) ??
-      roles[0];
-    const roleId = String(role?.roleId ?? "").trim();
-    const roleName = String(role?.nickname ?? role?.nickName ?? "").trim();
-    const serverName = String(role?.serverName ?? "").trim();
-
-    if (!uid) throw new Error("query_role_list 解析失败: 未找到 uid");
-    if (!roleId) throw new Error("query_role_list 解析失败: 未找到 roleId");
-
-    return { uid, roleId, roleName, serverName };
-  };
-
-  const getSystemAuthFromLog = async (
-    systemUid: string,
-  ): Promise<SystemGachaAuth> => {
-    // system(自动识别) 仅用于兼容旧版本：优先尝试国服日志，找不到再尝试国际服日志。
-    let provider: "hypergryph" | "gryphline" =
-      systemUid === SYSTEM_UID_GLOBAL ? "gryphline" : "hypergryph";
-
-    let uri = "";
-    if (systemUid === SYSTEM_UID_AUTO) {
-      uri =
-        (await getGachaUri("hypergryph")) || (await getGachaUri("gryphline"));
-      provider = uri.includes("ef-webview.gryphline.com")
-        ? "gryphline"
-        : "hypergryph";
-    } else {
-      uri = await getGachaUri(provider);
-    }
-    if (!uri) {
-      throw new Error(
-        "未在日志中找到抽卡链接哦~请先在游戏内打开一次抽卡记录页面，再进行同步~",
-      );
-    }
-
-    const params = parseGachaParams(uri);
-    if (!params?.u8_token) {
-      throw new Error("抽卡链接参数解析失败：未找到 u8_token");
-    }
-
-    const pickServerId = () => {
-      const candidates = [
-        (params as any)?.server_id,
-        (params as any)?.serverId,
-        (params as any)?.serverid,
-        (params as any)?.server,
-      ];
-      return String(
-        candidates.find((x) => x != null && String(x).trim() !== "") ?? "",
-      ).trim();
-    };
-
-    const serverId = provider === "gryphline" ? pickServerId() : "1";
-    if (provider === "gryphline" && !serverId) {
-      throw new Error("抽卡链接参数解析失败：未找到 serverId（国际服需要）");
-    }
-
-    const { uid, roleId, roleName, serverName } = await queryUidRoleFromU8Token(
-      provider,
-      params.u8_token,
-      serverId,
-    );
-
-    const channelLabel =
-      provider === "hypergryph"
-        ? inferChannelLabel({
-            channel: params.channel,
-            subChannel: params.subChannel,
-          })
-        : "国际服";
-
-    return {
-      u8Token: params.u8_token,
-      provider,
-      serverId,
-      detectedUid: uid,
-      detectedRoleId: roleId,
-      detectedUserKey: `${uid}_${roleId}`,
-      channelLabel,
-      roleName,
-      serverName: serverName || (provider === "gryphline" ? "Global" : "China"),
-    };
-  };
-
-  const getUserKey = (u: any) =>
-    u?.key || (u?.roleId?.roleId ? `${u.uid}_${u.roleId.roleId}` : u?.uid);
 
   const showToast = (title: string, desc: string) => {
     toast.add({
@@ -350,318 +42,39 @@ export const useGachaSync = () => {
     });
   };
 
-  const findConfigUserByKey = (config: any, userKey: string): User | null => {
-    const users = Array.isArray(config?.users) ? (config.users as User[]) : [];
-    const u = users.find((x: any) => getUserKey(x) === userKey) as
-      | User
-      | undefined;
-    return u || null;
-  };
+  const { poolInfoById, loadPoolInfo, ensurePoolInfoForPoolIds } =
+    useGachaPoolInfo({ userAgent: user_agent });
 
-  const upsertLogUser = async (auth: SystemGachaAuth): Promise<void> => {
-    const key = auth.detectedUserKey;
+  const { charRecords, weaponRecords, loadUserData, saveUserData } =
+    useGachaRecords({ loadPoolInfo });
 
-    await invoke("init_user_record", { uid: key });
+  const {
+    getAuthToken,
+    getSystemAuthFromLog,
+    findConfigUserByKey,
+    initUserRecord,
+    upsertLogUser,
+    systemRegionLabel,
+  } = useGachaAuth({
+    userAgent: user_agent,
+    isWindows,
+    detectPlatform,
+    loadPoolInfo,
+    addUser,
+  });
 
-    const role: UserRole = {
-      serverId: auth.serverId,
-      serverName:
-        auth.serverName || (auth.provider === "gryphline" ? "Global" : "China"),
-      nickName: auth.roleName || auth.detectedRoleId,
-      roleId: auth.detectedRoleId,
-    };
+  const { syncCharacters, syncWeapons } = createGachaApi({
+    userAgent: user_agent,
+    syncProgress,
+    ensurePoolInfoForPoolIds,
+    saveUserData,
+  });
 
-    const u: User = {
-      key,
-      uid: auth.detectedUid,
-      token: "",
-      provider: auth.provider,
-      roleId: role,
-      source: "log",
-    };
-
-    await addUser(u);
-  };
-
-  const charRecords = useState<Record<string, EndFieldCharInfo[]>>(
-    "gacha-records-char",
-    () => ({}),
-  );
-  const weaponRecords = useState<Record<string, EndFieldWeaponInfo[]>>(
-    "gacha-records-weapon",
-    () => ({}),
-  );
-
-  const loadUserData = async (uid: string, type: "char" | "weapon") => {
-    const command =
-      type === "char" ? "read_char_records" : "read_weapon_records";
-    try {
-      const data = await invoke<any>(command, { uid });
-      if (type === "char") charRecords.value = data || {};
-      else weaponRecords.value = data || {};
-      if (type === "char") await loadPoolInfo();
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  const mergeRecords = <T extends GachaItem>(
-    oldRecords: T[],
-    newRecords: T[],
-  ): T[] => {
-    const existingIds = new Set(oldRecords.map((r) => r.seqId));
-    const uniqueNewRecords = newRecords.filter(
-      (r) => !existingIds.has(r.seqId),
-    );
-    if (uniqueNewRecords.length === 0) {
-      return oldRecords;
-    }
-    const merged = [...oldRecords, ...uniqueNewRecords];
-
-    return merged.sort((a, b) => {
-      if (a.seqId.length === b.seqId.length) {
-        return b.seqId.localeCompare(a.seqId);
-      }
-      return Number(b.seqId) - Number(a.seqId);
-    });
-  };
-
-  const saveUserData = async (
-    uid: string,
-    newData: any,
-    type: "char" | "weapon",
-  ) => {
-    const commandRead =
-      type === "char" ? "read_char_records" : "read_weapon_records";
-    const commandSave =
-      type === "char" ? "save_char_records" : "save_weapon_records";
-
-    const oldAllData = (await invoke<any>(commandRead, { uid })) || {};
-    let totalNew = 0;
-
-    for (const [poolKey, list] of Object.entries(newData)) {
-      const oldList = oldAllData[poolKey] || [];
-      const merged = mergeRecords(oldList as GachaItem[], list as GachaItem[]);
-      totalNew += merged.length - oldList.length;
-      oldAllData[poolKey] = merged;
-    }
-
-    if (totalNew > 0) {
-      await invoke(commandSave, { uid, data: oldAllData });
-    }
-    return totalNew;
-  };
-
-  const fetchPaginatedData = async <T extends GachaItem>(
-    u8_token: string,
-    baseUrl: string,
-    serverId: string,
-    extraParams: Record<string, string>,
-    progress?: { type: "char" | "weapon"; poolName: string },
-    lang: string = "zh-cn",
-  ): Promise<T[]> => {
-    const allData: T[] = [];
-    let nextSeqId = "";
-    let hasMore = true;
-    let page = 0;
-
-    try {
-      while (hasMore) {
-        page++;
-        if (progress) {
-          syncProgress.value = {
-            type: progress.type,
-            poolName: progress.poolName,
-            page,
-          };
-        }
-
-        const query = new URLSearchParams({
-          lang,
-          token: u8_token,
-          server_id: serverId,
-          ...extraParams,
-        });
-        if (nextSeqId) query.set("seq_id", nextSeqId);
-
-        const response = await fetch(`${baseUrl}?${query.toString()}`, {
-          method: "GET",
-          headers: { "User-Agent": user_agent.value },
-        });
-
-        if (!response.ok) throw new Error("Network response was not ok");
-        const res = await response.json();
-
-        if (res.code !== 0 || !res.data?.list) break;
-
-        const list = res.data.list as T[];
-        if (list.length === 0) break;
-
-        allData.push(...list);
-        hasMore = res.data.hasMore;
-        nextSeqId = list[list.length - 1]!.seqId;
-
-        if (hasMore) await delay(500, 1000);
-      }
-    } catch (error) {
-      console.error(`Fetch error for ${JSON.stringify(extraParams)}:`, error);
-    }
-
-    const isSpecialCharPool =
-      progress?.type === "char" && extraParams?.pool_type === SPECIAL_POOL_KEY;
-    if (isSpecialCharPool && allData.length > 0) {
-      const provider: "hypergryph" | "gryphline" = baseUrl.includes(
-        ".gryphline.com",
-      )
-        ? "gryphline"
-        : "hypergryph";
-      const poolIds = Array.from(
-        new Set(
-          (allData as any[])
-            .map((x) => String(x?.poolId || ""))
-            .filter(Boolean),
-        ),
-      );
-      await ensurePoolInfoForPoolIds({ provider, serverId, poolIds, lang });
-    }
-
-    return allData;
-  };
-
-  const getEfServerId = (
-    provider: "hypergryph" | "gryphline",
-    role?: { serverId: string; serverName: string } | null,
-  ) => {
-    if (provider === "hypergryph") return "1";
-
-    const rawId = String(role?.serverId ?? "").trim();
-    // const rawName = String(role?.serverName ?? "").toLowerCase();
-
-    if (provider === "gryphline") return rawId;
-
-    return "1";
-  };
-
-  const getAuthToken = async (userKey: string): Promise<GachaAuth | null> => {
-    try {
-      const config = await invoke<AppConfig>("read_config");
-      const targetUser = config.users?.find((u) => getUserKey(u) === userKey);
-      if (!targetUser?.token) return null;
-
-      const provider = targetUser.provider || "hypergryph";
-      const serverId = getEfServerId(provider, targetUser.roleId || null);
-      const uid = targetUser.uid;
-
-      const authRes = await fetch(
-        `https://as.${provider}.com/user/oauth2/v2/grant`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "User-Agent": user_agent.value,
-          },
-          body: JSON.stringify({
-            type: 1,
-            appCode:
-              provider === "gryphline"
-                ? "3dacefa138426cfe"
-                : "be36d44aa36bfb5b",
-            token: targetUser.token,
-          }),
-        },
-      );
-      if (!authRes.ok) return null;
-      const authData = await authRes.json();
-
-      const u8Res = await fetch(
-        `https://binding-api-account-prod.${provider}.com/account/binding/v1/u8_token_by_uid`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "User-Agent": user_agent.value,
-          },
-          body: JSON.stringify({ uid, token: authData.data.token }),
-        },
-      );
-      if (!u8Res.ok) return null;
-      const u8Data = await u8Res.json();
-      if (!u8Data?.data?.token) return null;
-      return { u8Token: u8Data.data.token as string, provider, serverId };
-    } catch (e) {
-      console.error("Auth error", e);
-      return null;
-    }
-  };
-
-  const syncCharacters = async (
-    uid: string,
-    u8_token: string,
-    provider: "hypergryph" | "gryphline",
-    serverId: string,
-  ) => {
-    // const lang = provider === "gryphline" ? "en-us" : "zh-cn";
-    const lang = "zh-cn";
-    const fetched: Record<string, EndFieldCharInfo[]> = {};
-    for (const poolType of POOL_TYPES) {
-      const poolName = POOL_NAME_MAP[poolType] || poolType;
-      fetched[poolType] = await fetchPaginatedData<EndFieldCharInfo>(
-        u8_token,
-        `https://ef-webview.${provider}.com/api/record/char`,
-        serverId,
-        { pool_type: poolType },
-        { type: "char", poolName },
-        lang,
-      );
-    }
-    return await saveUserData(uid, fetched, "char");
-  };
-
-  const syncWeapons = async (
-    uid: string,
-    u8_token: string,
-    provider: "hypergryph" | "gryphline",
-    serverId: string,
-  ) => {
-    // const lang = provider === "gryphline" ? "en-us" : "zh-cn";
-    const lang = "zh-cn";
-    syncProgress.value = {
-      type: "weapon",
-      poolName: "获取武器池列表",
-      page: 1,
-    };
-    const query = new URLSearchParams({
-      lang,
-      token: u8_token,
-      server_id: serverId,
-    });
-    const poolRes = await fetch(
-      `https://ef-webview.${provider}.com/api/record/weapon/pool?${query.toString()}`,
-      {
-        headers: { "User-Agent": user_agent.value },
-      },
-    );
-    const poolJson = await poolRes.json();
-    if (poolJson.code !== 0 || !poolJson.data) {
-      throw new Error(`获取武器池列表失败: ${poolJson.msg}`);
-    }
-
-    const pools = poolJson.data as { poolId: string; poolName: string }[];
-    const fetched: Record<string, EndFieldWeaponInfo[]> = {};
-
-    for (const pool of pools) {
-      console.log(`正在同步武器池: ${pool.poolName}`);
-      fetched[pool.poolId] = await fetchPaginatedData<EndFieldWeaponInfo>(
-        u8_token,
-        `https://ef-webview.${provider}.com/api/record/weapon`,
-        serverId,
-        { pool_id: pool.poolId },
-        { type: "weapon", poolName: pool.poolName || pool.poolId },
-        lang,
-      );
-    }
-    return await saveUserData(uid, fetched, "weapon");
-  };
+  const { charStatistics, weaponStatistics } = useGachaStatistics({
+    charRecords,
+    weaponRecords,
+    poolInfoById,
+  });
 
   const handleSync = async (uid: string, type: "char" | "weapon" = "char") => {
     if (isSyncing.value) return;
@@ -714,7 +127,7 @@ export const useGachaSync = () => {
         if (!existing) {
           await upsertLogUser(systemAuth);
         } else {
-          await invoke("init_user_record", { uid: systemAuth.detectedUserKey });
+          await initUserRecord(systemAuth.detectedUserKey);
         }
 
         effectiveUid = systemAuth.detectedUserKey;
@@ -727,10 +140,7 @@ export const useGachaSync = () => {
           uid === SYSTEM_UID_OFFICIAL ||
           uid === SYSTEM_UID_BILIBILI;
 
-        const regionLabel =
-          systemAuth.provider === "gryphline"
-            ? systemUidLabel(SYSTEM_UID_GLOBAL)
-            : systemUidLabel(SYSTEM_UID_CN);
+        const regionLabel = systemRegionLabel(systemAuth);
 
         if (isMainSystemUid) {
           const extra =
@@ -783,36 +193,6 @@ export const useGachaSync = () => {
       syncProgress.value = { type: null, poolName: "", page: 0 };
     }
   };
-
-  const charStatistics = computed(() => {
-    if (!charRecords.value) return [];
-
-    const out: GachaStatistics[] = [];
-
-    for (const poolType of POOL_TYPES) {
-      const list = charRecords.value[poolType];
-      if (!list) continue;
-
-      if (poolType === SPECIAL_POOL_KEY) {
-        out.push(...analyzeSpecialPoolData(list, poolInfoById.value));
-      } else out.push(analyzePoolData(poolType, list));
-    }
-
-    // Fallback
-    for (const [k, list] of Object.entries(charRecords.value)) {
-      if ((POOL_TYPES as readonly string[]).includes(k)) continue;
-      out.push(analyzePoolData(k, list as any));
-    }
-
-    return out;
-  });
-
-  const weaponStatistics = computed(() => {
-    if (!weaponRecords.value) return [];
-    return Object.keys(weaponRecords.value).map((k) =>
-      analyzeWeaponPoolData(k, weaponRecords.value[k]!),
-    );
-  });
 
   return {
     charRecords,
