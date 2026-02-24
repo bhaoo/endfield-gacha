@@ -1,6 +1,6 @@
 <template>
   <UApp>
-    <UContainer class="mt-3 space-y-4">
+    <UContainer class="my-3 space-y-4">
       <div class="flex justify-between items-center">
         <div class="flex items-center gap-2">
           <UButton @click="onSyncClick" color="primary" :loading="isSyncing" :disabled="isSyncing">
