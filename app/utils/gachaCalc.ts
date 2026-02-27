@@ -206,6 +206,9 @@ export const analyzeWeaponPoolData = (
         pity: pullsSinceLast6,
         isNew: item.isNew,
         isUp: !!up6Id && item.weaponId === up6Id,
+        poolId: poolKey,
+        poolName: item.poolName || poolKey,
+        up6Id: up6Id || undefined,
       });
 
       if (up6Id && item.weaponId === up6Id) gotUp6 = true;
@@ -224,6 +227,7 @@ export const analyzeWeaponPoolData = (
     : poolKey;
 
   return {
+    poolId: poolKey,
     poolName: displayPoolName,
     totalPulls: data.length,
     pityCount: pullsSinceLast6,
