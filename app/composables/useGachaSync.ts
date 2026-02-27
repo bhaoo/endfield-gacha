@@ -58,7 +58,7 @@ export const useGachaSync = () => {
     saveUserData,
     readMaxSeqIdFromMeta,
     getGlobalMaxSeqIdFromRaw,
-  } = useGachaRecords({ loadPoolInfo });
+  } = useGachaRecords({ loadPoolInfo, currentUid });
 
   const {
     getAuthToken,

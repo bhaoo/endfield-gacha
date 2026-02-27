@@ -1,7 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { Ref } from "vue";
 import type { EndFieldCharInfo, EndFieldWeaponInfo, GachaItem } from "~/types/gacha";
 
-export const useGachaRecords = (params?: { loadPoolInfo?: () => Promise<void> }) => {
+export const useGachaRecords = (params?: {
+  loadPoolInfo?: () => Promise<void>;
+  currentUid?: Ref<string>;
+}) => {
   const charRecords = useState<Record<string, EndFieldCharInfo[]>>(
     "gacha-records-char",
     () => ({}),
@@ -84,6 +88,7 @@ export const useGachaRecords = (params?: { loadPoolInfo?: () => Promise<void> })
       type === "char" ? "read_char_records" : "read_weapon_records";
     try {
       const data = await invoke<any>(command, { uid });
+      if (params?.currentUid && params.currentUid.value !== uid) return;
       if (type === "char") charRecords.value = data || {};
       else weaponRecords.value = data || {};
       if (type === "char") await params?.loadPoolInfo?.();
