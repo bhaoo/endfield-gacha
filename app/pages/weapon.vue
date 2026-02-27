@@ -5,64 +5,73 @@
     <p class="text-sm mt-1">请先点击左上角添加账号，或选择一个已有账号。</p>
   </div>
 
+  <div v-else-if="isUserDataLoading" class="text-center text-gray-500 py-16">
+    <div class="mb-2 text-4xl">⏳</div>
+    <p class="text-lg font-medium">正在加载数据...</p>
+    <p class="text-sm mt-1">切换账号时会读取本地记录，请稍等片刻。</p>
+  </div>
+
   <div v-else-if="statistics.length > 0" class="grid grid-cols-1 md:grid-cols-3 gap-4">
-    <UCard v-for="stat in statistics" :key="stat.poolName">
+    <UCard v-if="allWeaponStat" :key="'weapon-all'">
       <template #header>
         <div class="flex justify-between items-center">
-          <h3 class="text-lg font-bold">{{ stat.poolName }}</h3>
-          <UBadge>
-            当前已垫: {{ stat.pityCount }} 抽
-          </UBadge>
+          <h3 class="text-lg font-bold">所有武器池</h3>
         </div>
       </template>
 
-      <PieChart :data="stat"></PieChart>
+      <GachaStatBody :stat="allWeaponStat" show-pool-name-in-history />
+    </UCard>
 
-      <div class="space-y-2 text-sm">
-        <div class="flex justify-between border-b pb-1">
-          <span>总抽数:</span> <span>{{ stat.totalPulls }}</span>
-        </div>
-
-        <div v-for="row in getStarRows(stat)" :key="row.label"
-          class="grid grid-cols-[40px_70px_80px_1fr] gap-1 text-xs py-1 border-b border-gray-100 dark:border-gray-800 items-center">
-          <span :class="['font-bold', row.color]">{{ row.label }}</span>
-
-          <span class="text-gray-600 dark:text-gray-300">
-            共 {{ row.count }} 个
-          </span>
-
-          <span class="text-gray-500">
-            占 {{ getPercent(row.count, stat.totalPulls) }}%
-          </span>
-
-          <span class="text-gray-500">
-            平均 {{ getAvg(row.count, stat.totalPulls) }} 抽/个
-          </span>
-        </div>
-
-        <div class="mt-3">
-          <p class="font-semibold mb-2 text-gray-500 text-xs">6★ 历史记录:</p>
-
-          <div v-if="stat.history6.length > 0" class="flex flex-wrap gap-2">
-            <div v-for="(rec, idx) in [...stat.history6].reverse()" :key="idx"
-              class="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 flex items-center gap-1">
-              <span class="font-medium text-gray-700 dark:text-gray-200">
-                {{ rec.name }}
-              </span>
-
-              <span class="text-gray-400">[{{ rec.pity }}]</span>
-
-              <span v-if="rec.isNew" class="text-red-500 font-bold ml-0.5 text-[10px]">
-                [NEW]
-              </span>
-            </div>
+    <UCard v-if="selectedLimitedStat" :key="'weapon-limited'" class="relative">
+      <template #header>
+        <div class="flex justify-between items-start gap-3">
+          <div class="min-w-0">
+            <h3 class="text-lg font-bold truncate">限定武器池</h3>
           </div>
 
-          <div v-else class="text-xs text-gray-400 italic">
-            暂无6星记录
+          <div class="flex flex-col items-end gap-1 shrink-0">
+            <USelect v-model="selectedLimitedPoolId" :items="limitedPoolOptions" placeholder="选择限定池" size="sm"
+              class="w-44" />
           </div>
         </div>
+      </template>
+
+      <div class="absolute top-18 right-3 flex flex-col gap-1">
+        <UBadge v-if="!isAllLimitedSelected" variant="outline">当前已垫: {{ selectedLimitedStat.pityCount }} 抽</UBadge>
+        <UBadge v-if="!isAllLimitedSelected && selectedLimitedStat.up6Id"
+          :variant="selectedLimitedStat.gotUp6 ? 'solid' : 'outline'">
+          <span v-if="selectedLimitedStat.gotUp6">已获得当期 UP</span>
+          <span v-else>尚未获得当期 UP</span>
+        </UBadge>
       </div>
+
+      <GachaStatBody :stat="selectedLimitedStat" :show-pool-name-in-history="isAllLimitedSelected" />
+    </UCard>
+
+    <UCard v-if="selectedNormalStat" :key="'weapon-normal'" class="relative">
+      <template #header>
+        <div class="flex justify-between items-start gap-3">
+          <div class="min-w-0">
+            <h3 class="text-lg font-bold truncate">非限定武器池</h3>
+          </div>
+
+          <div class="flex flex-col items-end gap-1 shrink-0">
+            <USelect v-model="selectedNormalPoolId" :items="normalPoolOptions" placeholder="选择非限定池" size="sm"
+              class="w-44" />
+          </div>
+        </div>
+      </template>
+
+      <div class="absolute top-18 right-3 flex flex-col gap-1">
+        <UBadge v-if="!isAllNormalSelected" variant="outline">当前已垫: {{ selectedNormalStat.pityCount }} 抽</UBadge>
+        <UBadge v-if="!isAllNormalSelected && selectedNormalStat.up6Id"
+          :variant="selectedNormalStat.gotUp6 ? 'solid' : 'outline'">
+          <span v-if="selectedNormalStat.gotUp6">已获得当期 UP</span>
+          <span v-else>尚未获得当期 UP</span>
+        </UBadge>
+      </div>
+
+      <GachaStatBody :stat="selectedNormalStat" :show-pool-name-in-history="isAllNormalSelected" />
     </UCard>
   </div>
   <div v-else-if="isSystem && statistics.length <= 0" class="text-center text-gray-500 py-16">
@@ -78,33 +87,59 @@
 
 <script setup lang="ts">
 import { isSystemUid, systemUidLabel, SYSTEM_UID_CN } from '~/utils/systemAccount'
+import type { GachaStatistics } from '~/types/gacha'
 
 const { currentUser: uid } = useUserStore()
 
 const { weaponStatistics: statistics } = useGachaSync();
+const isUserDataLoading = useState<boolean>('gacha-user-data-loading', () => false)
 
 const isSystem = computed(() => isSystemUid(uid.value))
 const systemLabel = computed(() => systemUidLabel(uid.value || SYSTEM_UID_CN))
 
-interface StarRow {
-  label: string;
-  count: number;
-  color: string;
-}
+const isLimitedPool = (poolId: string) => !poolId.includes('constant')
 
-const getStarRows = (stat: any): StarRow[] => [
-  { label: '6★', count: stat.count6, color: 'text-orange-400' },
-  { label: '5★', count: stat.count5, color: 'text-yellow-400' },
-  { label: '4★', count: stat.count4, color: 'text-purple-500' },
-];
+const limitedStats = computed(() =>
+  (statistics.value || []).filter((s) => isLimitedPool(String(s.poolId || ''))),
+)
+const normalStats = computed(() =>
+  (statistics.value || []).filter((s) => !isLimitedPool(String(s.poolId || ''))),
+)
 
-const getPercent = (count: number, total: number) => {
-  if (total <= 0) return '0.00';
-  return ((count / total) * 100).toFixed(2);
-};
+const allWeaponStat = computed<GachaStatistics | undefined>(() => {
+  const list = statistics.value || []
+  if (list.length <= 0) return undefined
 
-const getAvg = (count: number, total: number) => {
-  if (count <= 0) return '0.00';
-  return (total / count).toFixed(2);
-};
+  const totalPulls = list.reduce((sum, s) => sum + (s.totalPulls || 0), 0)
+  const count6 = list.reduce((sum, s) => sum + (s.count6 || 0), 0)
+  const count5 = list.reduce((sum, s) => sum + (s.count5 || 0), 0)
+  const count4 = list.reduce((sum, s) => sum + (s.count4 || 0), 0)
+  const history6 = list.flatMap((s) => s.history6 || [])
+
+  return {
+    poolName: '所有武器池',
+    poolId: '__all_weapons__',
+    totalPulls,
+    pityCount: 0,
+    count6,
+    count5,
+    count4,
+    history6,
+  }
+})
+
+const {
+  selectedId: selectedLimitedPoolId,
+  options: limitedPoolOptions,
+  isAllSelected: isAllLimitedSelected,
+  selectedStat: selectedLimitedStat,
+} = usePoolSelector({ stats: limitedStats, allValue: '__all__', allLabel: '全部' })
+
+const {
+  selectedId: selectedNormalPoolId,
+  options: normalPoolOptions,
+  isAllSelected: isAllNormalSelected,
+  selectedStat: selectedNormalStat,
+} = usePoolSelector({ stats: normalStats, allValue: '__all__', allLabel: '全部' })
+
 </script>

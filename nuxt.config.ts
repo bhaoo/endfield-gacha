@@ -4,6 +4,12 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   modules: ['@nuxt/ui', 'nuxt-echarts'],
   css: ['~/assets/css/main.css'],
+  imports: {
+    dirs: [
+      '~/composables',
+      '~/composables/*/index.{ts,js,mjs,mts}',
+    ],
+  },
   ssr: false,
   devServer: { host: process.env.TAURI_DEV_HOST || 'localhost' },
   vite: {

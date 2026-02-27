@@ -5,6 +5,12 @@
     <p class="text-sm mt-1">请先点击左上角添加账号，或选择一个已有账号。</p>
   </div>
 
+  <div v-else-if="isUserDataLoading" class="text-center text-gray-500 py-16">
+    <div class="mb-2 text-4xl">⏳</div>
+    <p class="text-lg font-medium">正在加载数据...</p>
+    <p class="text-sm mt-1">切换账号时会读取本地记录，请稍等片刻。</p>
+  </div>
+
   <div v-else-if="statistics.length > 0" class="grid grid-cols-1 md:grid-cols-3 gap-4">
     <UCard v-if="selectedSpecialStat" :key="'special-pools'" class="relative">
       <template #header>
@@ -21,8 +27,13 @@
       </template>
 
       <div class="absolute top-18 right-3 flex flex-col gap-1">
-        <UBadge variant="outline">当前已垫: {{ selectedSpecialStat.pityCount }} 抽</UBadge>
-        <UBadge v-if="selectedSpecialStat.bigPityRemaining !== undefined"
+        <UBadge v-if="!isAllSpecialSelected" variant="outline">当前已垫: {{ selectedSpecialStat.pityCount }} 抽</UBadge>
+        <UBadge
+          v-if="
+            !isAllSpecialSelected &&
+            selectedSpecialStat.bigPityRemaining !== undefined &&
+            selectedSpecialStat.bigPityMax !== undefined
+          "
           :variant="(selectedSpecialStat.gotUp6) ? 'solid' : 'outline'">
           <span v-if="selectedSpecialStat.gotUp6">已获得当期 UP</span>
           <span v-else>大保底: {{ selectedSpecialStat.bigPityMax - selectedSpecialStat.bigPityRemaining }} / {{
@@ -55,7 +66,12 @@
         </div>
 
         <div class="mt-3">
-          <p class="font-semibold mb-2 text-gray-500 text-xs">6★ 历史记录:</p>
+          <p class="font-semibold mb-2 text-gray-500 text-xs">
+            6★ 历史记录:
+            <span class="font-normal text-gray-400">
+              出卡数 {{ selectedSpecialHistory6Count }} 次 · 歪 {{ selectedSpecialOffCount }} 次
+            </span>
+          </p>
 
           <div v-if="selectedSpecialStat.history6.length > 0" class="flex flex-wrap gap-2">
             <div v-for="(rec, idx) in [...selectedSpecialStat.history6].reverse()" :key="idx"
@@ -65,12 +81,11 @@
               </span>
 
               <span class="text-gray-400">[{{ rec.isFree ? '加急招募' : rec.pity }}]</span>
-
               <span v-if="rec.isNew" class="text-red-500 font-bold ml-0.5 text-[10px]">
                 [NEW]
               </span>
 
-              <svg width="20" height="20" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" v-if="!rec.isUp"
+              <svg width="20" height="20" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" v-if="rec.up6Id && rec.isUp === false"
                 class="absolute -top-2 -right-2 select-none">
                 <circle cx="150" cy="150" r="140" fill="oklch(55.1% 0.027 264.364)" />
                 <text x="50%" y="50%"
@@ -166,11 +181,13 @@ import type { GachaStatistics } from '~/types/gacha'
 
 const { currentUser: uid } = useUserStore()
 const { charStatistics: statistics } = useGachaSync();
+const isUserDataLoading = useState<boolean>('gacha-user-data-loading', () => false)
 
 const isSystem = computed(() => isSystemUid(uid.value))
 const systemLabel = computed(() => systemUidLabel(uid.value || SYSTEM_UID_CN))
 
 const SPECIAL_POOL_TYPE = 'E_CharacterGachaPoolType_Special'
+const ALL_SPECIAL_VALUE = '__all__'
 
 const specialStats = computed(() =>
   (statistics.value || []).filter((s) => s.poolType === SPECIAL_POOL_TYPE),
@@ -181,13 +198,17 @@ const otherStats = computed(() =>
 )
 
 const specialPoolOptions = computed(() =>
-  specialStats.value.map((s) => ({
-    label: s.poolName,
-    value: s.poolId || s.poolName,
-  })),
+  [
+    ...(specialStats.value.length > 1 ? [{ label: '全部', value: ALL_SPECIAL_VALUE }] : []),
+    ...specialStats.value.map((s) => ({
+      label: s.poolName,
+      value: s.poolId || s.poolName,
+    })),
+  ],
 )
 
 const selectedSpecialPoolId = ref<string>('')
+const isAllSpecialSelected = computed(() => selectedSpecialPoolId.value === ALL_SPECIAL_VALUE)
 
 watch(
   specialStats,
@@ -198,10 +219,28 @@ watch(
     }
 
     const selectedKey = selectedSpecialPoolId.value
+    if (selectedKey === ALL_SPECIAL_VALUE) {
+      if (list.length > 1) return
+      selectedSpecialPoolId.value = (list[0]!.poolId || list[0]!.poolName) as string
+      return
+    }
+
+    // 当存在多个特许池时默认选“全部”
+    if (!selectedKey) {
+      if (list.length > 1) {
+        selectedSpecialPoolId.value = ALL_SPECIAL_VALUE
+        return
+      }
+    }
     const isValid = list.some((s) => (s.poolId || s.poolName) === selectedKey)
     if (isValid) return
 
     const current = list.find((s) => s.isCurrentPool)
+    if (list.length > 1) {
+      selectedSpecialPoolId.value = ALL_SPECIAL_VALUE
+      return
+    }
+
     selectedSpecialPoolId.value =
       (current?.poolId ||
         current?.poolName ||
@@ -211,14 +250,51 @@ watch(
   { immediate: true },
 )
 
+const allSpecialStat = computed<GachaStatistics | undefined>(() => {
+  const list = specialStats.value || []
+  if (list.length <= 0) return undefined
+
+  const totalPulls = list.reduce((sum, s) => sum + (s.totalPulls || 0), 0)
+  const count6 = list.reduce((sum, s) => sum + (s.count6 || 0), 0)
+  const count5 = list.reduce((sum, s) => sum + (s.count5 || 0), 0)
+  const count4 = list.reduce((sum, s) => sum + (s.count4 || 0), 0)
+
+  // 直接按“池段”拼接：specialStats 本身按时间段分组（最新池在前），拼接后大体符合时间顺序。
+  const history6 = list.flatMap((s) => s.history6 || [])
+
+  return {
+    poolType: SPECIAL_POOL_TYPE,
+    poolName: '全部',
+    totalPulls,
+    pityCount: 0,
+    count6,
+    count5,
+    count4,
+    history6,
+  }
+})
+
 const selectedSpecialStat = computed<GachaStatistics | undefined>(() => {
   if (specialStats.value.length <= 0) return undefined
+  if (selectedSpecialPoolId.value === ALL_SPECIAL_VALUE) {
+    return allSpecialStat.value || specialStats.value[0]
+  }
   const key = selectedSpecialPoolId.value
   return (
     specialStats.value.find((s) => (s.poolId || s.poolName) === key) ||
     specialStats.value[0]
   )
 })
+
+const selectedSpecialHistory6Count = computed(
+  () => selectedSpecialStat.value?.history6?.length || 0,
+)
+const selectedSpecialOffCount = computed(
+  () =>
+    (selectedSpecialStat.value?.history6 || []).filter(
+      (r) => !!r.up6Id && r.isUp === false,
+    ).length,
+)
 
 interface StarRow {
   label: string;

@@ -157,6 +157,9 @@ export const analyzeSpecialPoolData = (
         isNew: item.isNew,
         isFree,
         isUp: !!current.up6Id && item.charId === current.up6Id,
+        poolId: current.poolId,
+        poolName: current.poolName,
+        up6Id: current.up6Id || undefined,
       });
 
       if (current.up6Id && item.charId === current.up6Id) current.gotUp6 = true;
@@ -177,13 +180,18 @@ export const analyzeSpecialPoolData = (
   return results.reverse();
 };
 
-export const analyzeWeaponPoolData = (poolKey: string, rawData: EndFieldWeaponInfo[]): GachaStatistics => {
+export const analyzeWeaponPoolData = (
+  poolKey: string,
+  rawData: EndFieldWeaponInfo[],
+  up6Id?: string,
+): GachaStatistics => {
   const data = [...rawData].reverse();
 
   let count6 = 0;
   let count5 = 0;
   let count4 = 0;
   let pullsSinceLast6 = 0;
+  let gotUp6 = false;
 
   const historyRecords: HistoryRecord[] = [];
 
@@ -196,9 +204,14 @@ export const analyzeWeaponPoolData = (poolKey: string, rawData: EndFieldWeaponIn
       historyRecords.push({
         name: item.weaponName,
         pity: pullsSinceLast6,
-        isNew: item.isNew
+        isNew: item.isNew,
+        isUp: !!up6Id && item.weaponId === up6Id,
+        poolId: poolKey,
+        poolName: item.poolName || poolKey,
+        up6Id: up6Id || undefined,
       });
 
+      if (up6Id && item.weaponId === up6Id) gotUp6 = true;
       pullsSinceLast6 = 0;
     } else if (item.rarity === 5) {
       count5++;
@@ -214,9 +227,12 @@ export const analyzeWeaponPoolData = (poolKey: string, rawData: EndFieldWeaponIn
     : poolKey;
 
   return {
+    poolId: poolKey,
     poolName: displayPoolName,
     totalPulls: data.length,
     pityCount: pullsSinceLast6,
+    up6Id,
+    gotUp6,
     count6,
     count5,
     count4,

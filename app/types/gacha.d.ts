@@ -103,6 +103,9 @@ export interface HistoryRecord {
   isNew: boolean;
   isFree?: boolean;
   isUp?: boolean;
+  poolId?: string;
+  poolName?: string;
+  up6Id?: string;
 }
 
 export interface GachaStatistics {

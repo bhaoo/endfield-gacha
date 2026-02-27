@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 use std::{thread, time::Duration};
 use tauri::command;
-use tauri::{AppHandle, Manager, WebviewWindowBuilder, WebviewUrl, Emitter, WindowEvent};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 #[cfg(target_os = "linux")]
 const APP_IDENTIFIER: &str = "com.bhao.endfieldgacha";
@@ -101,19 +101,106 @@ fn get_pool_info_path() -> Result<PathBuf, String> {
 
 fn load_full_record(uid: &str) -> Result<serde_json::Value, String> {
     let file_path = get_record_path(uid)?;
-    
+
     if !file_path.exists() {
-        return Ok(serde_json::json!({})); 
+        return Ok(serde_json::json!({}));
     }
 
     let content = fs::read_to_string(file_path).map_err(|e| e.to_string())?;
     let data: serde_json::Value = serde_json::from_str(&content).unwrap_or(serde_json::json!({}));
-    
+
     if !data.is_object() {
         return Ok(serde_json::json!({}));
     }
 
     Ok(data)
+}
+
+fn is_digits_only(value: &str) -> bool {
+    !value.is_empty() && value.bytes().all(|b| b.is_ascii_digit())
+}
+
+fn compare_seqid(a: &str, b: &str) -> std::cmp::Ordering {
+    if a == b {
+        return std::cmp::Ordering::Equal;
+    }
+
+    let a_digits = is_digits_only(a);
+    let b_digits = is_digits_only(b);
+
+    if a_digits && b_digits {
+        if a.len() != b.len() {
+            return a.len().cmp(&b.len());
+        }
+        return a.cmp(b);
+    }
+
+    if a_digits != b_digits {
+        return if a_digits {
+            std::cmp::Ordering::Greater
+        } else {
+            std::cmp::Ordering::Less
+        };
+    }
+
+    a.cmp(b)
+}
+
+fn value_to_seqid(value: &serde_json::Value) -> Option<String> {
+    if let Some(s) = value.as_str() {
+        let s = s.trim();
+        if s.is_empty() {
+            None
+        } else {
+            Some(s.to_string())
+        }
+    } else if let Some(n) = value.as_i64() {
+        Some(n.to_string())
+    } else if let Some(n) = value.as_u64() {
+        Some(n.to_string())
+    } else {
+        None
+    }
+}
+
+fn calc_max_seqid_from_records(records: &serde_json::Value) -> String {
+    let obj = match records.as_object() {
+        Some(o) => o,
+        None => return "".into(),
+    };
+
+    let mut max_seqid: Option<String> = None;
+
+    for (_pool_key, list) in obj.iter() {
+        let arr = match list.as_array() {
+            Some(a) => a,
+            None => continue,
+        };
+        if arr.is_empty() {
+            continue;
+        }
+
+        for item in [arr.first(), arr.last()] {
+            let Some(item) = item else { continue };
+            let Some(seq_val) = item.get("seqId") else {
+                continue;
+            };
+            let Some(candidate) = value_to_seqid(seq_val) else {
+                continue;
+            };
+
+            match &max_seqid {
+                None => max_seqid = Some(candidate),
+                Some(cur) => {
+                    if compare_seqid(&candidate, cur) == std::cmp::Ordering::Greater {
+                        max_seqid = Some(candidate);
+                    }
+                }
+            }
+        }
+    }
+
+    max_seqid.unwrap_or_else(|| "".into())
 }
 
 #[tauri::command]
@@ -134,7 +221,7 @@ async fn open_login_window(app: AppHandle, provider: Option<String>) {
             "登录鹰角通行证",
         ),
     };
-    
+
     if let Some(win) = app.get_webview_window(&label) {
         let _ = win.set_focus();
         return;
@@ -222,7 +309,7 @@ async fn open_login_window(app: AppHandle, provider: Option<String>) {
     let win_builder = WebviewWindowBuilder::new(
         &app,
         label.clone(),
-        WebviewUrl::External(login_url.parse().unwrap())
+        WebviewUrl::External(login_url.parse().unwrap()),
     )
     .title(title)
     .inner_size(500.0, 700.0)
@@ -230,22 +317,22 @@ async fn open_login_window(app: AppHandle, provider: Option<String>) {
     .initialization_script(script)
     .on_navigation(move |url| {
         let url_str = url.as_str();
-        
+
         if url_str.starts_with("http://tauri.localhost/login_success") {
             println!("Rust 拦截到登录回调: {}", url_str);
-            
+
             if let Some(query_start) = url_str.find("token=") {
                 let token = &url_str[query_start + 6..];
                 println!("解析 Token: {}", token);
 
                 let _ = app_handle_for_nav.emit("hg-login-success", token);
-                
+
                 let app_handle_clone = app_handle_for_nav.clone();
                 let label_clone = label_for_close.clone();
 
                 thread::spawn(move || {
                     thread::sleep(Duration::from_millis(500));
-                    
+
                     if let Some(win) = app_handle_clone.get_webview_window(&label_clone) {
                         let _ = win.close();
                     }
@@ -253,7 +340,7 @@ async fn open_login_window(app: AppHandle, provider: Option<String>) {
             }
             return false;
         }
-        
+
         true
     });
 
@@ -273,7 +360,7 @@ async fn open_login_window(app: AppHandle, provider: Option<String>) {
                     let _ = app_handle_for_event.emit("hg-login-closed", ());
                 }
             });
-        },
+        }
         Err(e) => {
             eprintln!("无法创建登录窗口: {}", e);
         }
@@ -312,7 +399,12 @@ fn init_user_record(uid: String) -> Result<String, String> {
         return Ok("Record already exists".into());
     }
 
-    let init_data = serde_json::json!({ "character": {}, "weapon": {} });
+    let init_data = serde_json::json!({
+        "character_max_seqid": "",
+        "weapon_max_seqid": "",
+        "character": {},
+        "weapon": {}
+    });
     let json_string = serde_json::to_string_pretty(&init_data).map_err(|e| e.to_string())?;
     fs::write(file_path, json_string).map_err(|e| e.to_string())?;
     Ok("Record initialized".into())
@@ -326,6 +418,8 @@ fn save_char_records(uid: String, data: serde_json::Value) -> Result<String, Str
 
     let mut full_data = load_full_record(&uid)?;
     full_data["character"] = data;
+    let max_seqid = calc_max_seqid_from_records(&full_data["character"]);
+    full_data["character_max_seqid"] = serde_json::json!(max_seqid);
 
     let file_path = get_record_path(&uid)?;
     let json_string = serde_json::to_string_pretty(&full_data).map_err(|e| e.to_string())?;
@@ -340,17 +434,24 @@ fn read_char_records(uid: String) -> Result<serde_json::Value, String> {
     }
 
     let full_data = load_full_record(&uid)?;
-    let char_data = full_data.get("character").unwrap_or(&serde_json::json!({})).clone();
+    let char_data = full_data
+        .get("character")
+        .unwrap_or(&serde_json::json!({}))
+        .clone();
     Ok(char_data)
 }
 
 #[command]
 fn save_weapon_records(uid: String, data: serde_json::Value) -> Result<String, String> {
-    if uid.trim().is_empty() { return Err("UID cannot be empty".into()); }
+    if uid.trim().is_empty() {
+        return Err("UID cannot be empty".into());
+    }
 
     let mut full_data = load_full_record(&uid)?;
 
     full_data["weapon"] = data;
+    let max_seqid = calc_max_seqid_from_records(&full_data["weapon"]);
+    full_data["weapon_max_seqid"] = serde_json::json!(max_seqid);
 
     let file_path = get_record_path(&uid)?;
     let json_string = serde_json::to_string_pretty(&full_data).map_err(|e| e.to_string())?;
@@ -360,11 +461,77 @@ fn save_weapon_records(uid: String, data: serde_json::Value) -> Result<String, S
 }
 
 #[command]
+fn read_char_max_seqid(uid: String) -> Result<String, String> {
+    if uid.trim().is_empty() {
+        return Err("UID cannot be empty".into());
+    }
+
+    let file_path = get_record_path(&uid)?;
+    if !file_path.exists() {
+        return Ok("".into());
+    }
+
+    let mut full_data = load_full_record(&uid)?;
+    if let Some(v) = full_data
+        .get("character_max_seqid")
+        .and_then(|x| x.as_str())
+    {
+        let s = v.trim();
+        if !s.is_empty() {
+            return Ok(s.to_string());
+        }
+    }
+
+    let computed =
+        calc_max_seqid_from_records(full_data.get("character").unwrap_or(&serde_json::json!({})));
+    if !computed.is_empty() {
+        full_data["character_max_seqid"] = serde_json::json!(computed.clone());
+        let json_string = serde_json::to_string_pretty(&full_data).map_err(|e| e.to_string())?;
+        fs::write(file_path, json_string).map_err(|e| e.to_string())?;
+    }
+    Ok(computed)
+}
+
+#[command]
+fn read_weapon_max_seqid(uid: String) -> Result<String, String> {
+    if uid.trim().is_empty() {
+        return Err("UID cannot be empty".into());
+    }
+
+    let file_path = get_record_path(&uid)?;
+    if !file_path.exists() {
+        return Ok("".into());
+    }
+
+    let mut full_data = load_full_record(&uid)?;
+    if let Some(v) = full_data.get("weapon_max_seqid").and_then(|x| x.as_str()) {
+        let s = v.trim();
+        if !s.is_empty() {
+            return Ok(s.to_string());
+        }
+    }
+
+    let computed =
+        calc_max_seqid_from_records(full_data.get("weapon").unwrap_or(&serde_json::json!({})));
+    if !computed.is_empty() {
+        full_data["weapon_max_seqid"] = serde_json::json!(computed.clone());
+        let json_string = serde_json::to_string_pretty(&full_data).map_err(|e| e.to_string())?;
+        fs::write(file_path, json_string).map_err(|e| e.to_string())?;
+    }
+    Ok(computed)
+}
+
+#[command]
 fn read_weapon_records(uid: String) -> Result<serde_json::Value, String> {
-    if uid.trim().is_empty() { return Err("UID cannot be empty".into()); }
+    if uid.trim().is_empty() {
+        return Err("UID cannot be empty".into());
+    }
 
     let full_data = load_full_record(&uid)?;
-    let weapon_data = full_data.get("weapon").unwrap_or(&serde_json::json!({})).clone();
+    let weapon_data = full_data
+        .get("weapon")
+        .unwrap_or(&serde_json::json!({}))
+        .clone();
     Ok(weapon_data)
 }
 
@@ -374,24 +541,65 @@ fn read_pool_info() -> Result<serde_json::Value, String> {
 
     if !file_path.exists() {
         let default_data = serde_json::json!([
-            {
-                "pool_gacha_type": "char",
-                "pool_id": "special_1_0_1",
-                "pool_name": "熔火灼痕",
-                "pool_type": "special",
-                "up6_id": "chr_0016_laevat"
-            },
-            {
-                "pool_gacha_type": "char",
-                "pool_id": "special_1_0_3",
-                "pool_name": "轻飘飘的信使",
-                "pool_type": "special",
-                "up6_id": "chr_0013_aglina"
-            }
+          {
+            "pool_gacha_type": "char",
+            "pool_id": "special_1_0_1",
+            "pool_name": "熔火灼痕",
+            "pool_type": "special",
+            "up6_id": "chr_0016_laevat"
+          },
+          {
+            "pool_gacha_type": "weapon",
+            "pool_id": "weaponbox_constant_2",
+            "pool_name": "星声申领",
+            "pool_type": "constant",
+            "up6_id": "wpn_funnel_0013"
+          },
+          {
+            "pool_gacha_type": "weapon",
+            "pool_id": "weponbox_1_0_3",
+            "pool_name": "迅行申领",
+            "pool_type": "special",
+            "up6_id": "wpn_funnel_0011"
+          },
+          {
+            "pool_gacha_type": "char",
+            "pool_id": "special_1_0_3",
+            "pool_name": "轻飘飘的信使",
+            "pool_type": "special",
+            "up6_id": "chr_0013_aglina"
+          },
+          {
+            "pool_gacha_type": "weapon",
+            "pool_id": "weponbox_1_0_1",
+            "pool_name": "熔铸申领",
+            "pool_type": "special",
+            "up6_id": "wpn_sword_0006"
+          },
+          {
+            "pool_gacha_type": "weapon",
+            "pool_id": "weaponbox_constant_3",
+            "pool_name": "远途申领",
+            "pool_type": "constant",
+            "up6_id": "wpn_sword_0016"
+          },
+          {
+            "pool_gacha_type": "weapon",
+            "pool_id": "weponbox_1_0_2",
+            "pool_name": "绘涂申领",
+            "pool_type": "special",
+            "up6_id": "wpn_pistol_0010"
+          },
+          {
+            "pool_gacha_type": "char",
+            "pool_id": "special_1_0_2",
+            "pool_name": "热烈色彩",
+            "pool_type": "special",
+            "up6_id": "chr_0017_yvonne"
+          }
         ]);
 
-        let json_string =
-            serde_json::to_string_pretty(&default_data).map_err(|e| e.to_string())?;
+        let json_string = serde_json::to_string_pretty(&default_data).map_err(|e| e.to_string())?;
         fs::write(&file_path, json_string).map_err(|e| e.to_string())?;
         return Ok(default_data);
     }
@@ -399,7 +607,11 @@ fn read_pool_info() -> Result<serde_json::Value, String> {
     let content = fs::read_to_string(&file_path).map_err(|e| e.to_string())?;
     let data: serde_json::Value =
         serde_json::from_str(&content).unwrap_or_else(|_| serde_json::json!([]));
-    if data.is_array() { Ok(data) } else { Ok(serde_json::json!([])) }
+    if data.is_array() {
+        Ok(data)
+    } else {
+        Ok(serde_json::json!([]))
+    }
 }
 
 #[command]
@@ -431,8 +643,10 @@ pub fn run() {
             init_user_record,
             save_char_records,
             read_char_records,
+            read_char_max_seqid,
             save_weapon_records,
             read_weapon_records,
+            read_weapon_max_seqid,
             read_pool_info,
             save_pool_info,
             get_os,
