@@ -212,11 +212,28 @@ watch(
     }
 
     const selectedKey = selectedSpecialPoolId.value
-    if (selectedKey === ALL_SPECIAL_VALUE) return
+    if (selectedKey === ALL_SPECIAL_VALUE) {
+      if (list.length > 1) return
+      selectedSpecialPoolId.value = (list[0]!.poolId || list[0]!.poolName) as string
+      return
+    }
+
+    // 当存在多个特许池时默认选“全部”
+    if (!selectedKey) {
+      if (list.length > 1) {
+        selectedSpecialPoolId.value = ALL_SPECIAL_VALUE
+        return
+      }
+    }
     const isValid = list.some((s) => (s.poolId || s.poolName) === selectedKey)
     if (isValid) return
 
     const current = list.find((s) => s.isCurrentPool)
+    if (list.length > 1) {
+      selectedSpecialPoolId.value = ALL_SPECIAL_VALUE
+      return
+    }
+
     selectedSpecialPoolId.value =
       (current?.poolId ||
         current?.poolName ||
