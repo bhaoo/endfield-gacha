@@ -106,6 +106,9 @@ export interface HistoryRecord {
   poolId?: string;
   poolName?: string;
   up6Id?: string;
+  // 用于跨卡池合并历史时排序
+  gachaTs?: string;
+  seqId?: string;
 }
 
 export interface GachaStatistics {
