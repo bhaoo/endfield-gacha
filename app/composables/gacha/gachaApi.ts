@@ -185,7 +185,7 @@ export const createGachaApi = (deps: {
     u8_token: string,
     provider: "hypergryph" | "gryphline",
     serverId: string,
-    options?: { stopSeqIdByPoolId?: Record<string, string> },
+    options?: { stopSeqId?: string },
   ) => {
     // const lang = provider === "gryphline" ? "en-us" : "zh-cn";
     const lang = "zh-cn";
@@ -222,7 +222,7 @@ export const createGachaApi = (deps: {
         { pool_id: pool.poolId },
         { type: "weapon", poolName: pool.poolName || pool.poolId },
         lang,
-        options?.stopSeqIdByPoolId?.[pool.poolId] || "",
+        options?.stopSeqId || "",
       );
     }
     return await deps.saveUserData(uid, fetched, "weapon");

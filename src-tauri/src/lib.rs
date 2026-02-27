@@ -116,6 +116,89 @@ fn load_full_record(uid: &str) -> Result<serde_json::Value, String> {
     Ok(data)
 }
 
+fn is_digits_only(value: &str) -> bool {
+    !value.is_empty() && value.bytes().all(|b| b.is_ascii_digit())
+}
+
+fn compare_seqid(a: &str, b: &str) -> std::cmp::Ordering {
+    if a == b {
+        return std::cmp::Ordering::Equal;
+    }
+
+    let a_digits = is_digits_only(a);
+    let b_digits = is_digits_only(b);
+
+    if a_digits && b_digits {
+        if a.len() != b.len() {
+            return a.len().cmp(&b.len());
+        }
+        return a.cmp(b);
+    }
+
+    if a_digits != b_digits {
+        return if a_digits {
+            std::cmp::Ordering::Greater
+        } else {
+            std::cmp::Ordering::Less
+        };
+    }
+
+    a.cmp(b)
+}
+
+fn value_to_seqid(value: &serde_json::Value) -> Option<String> {
+    if let Some(s) = value.as_str() {
+        let s = s.trim();
+        if s.is_empty() {
+            None
+        } else {
+            Some(s.to_string())
+        }
+    } else if let Some(n) = value.as_i64() {
+        Some(n.to_string())
+    } else if let Some(n) = value.as_u64() {
+        Some(n.to_string())
+    } else {
+        None
+    }
+}
+
+fn calc_max_seqid_from_records(records: &serde_json::Value) -> String {
+    let obj = match records.as_object() {
+        Some(o) => o,
+        None => return "".into(),
+    };
+
+    let mut max_seqid: Option<String> = None;
+
+    for (_pool_key, list) in obj.iter() {
+        let arr = match list.as_array() {
+            Some(a) => a,
+            None => continue,
+        };
+        if arr.is_empty() {
+            continue;
+        }
+
+        for item in [arr.first(), arr.last()] {
+            let Some(item) = item else { continue };
+            let Some(seq_val) = item.get("seqId") else { continue };
+            let Some(candidate) = value_to_seqid(seq_val) else { continue };
+
+            match &max_seqid {
+                None => max_seqid = Some(candidate),
+                Some(cur) => {
+                    if compare_seqid(&candidate, cur) == std::cmp::Ordering::Greater {
+                        max_seqid = Some(candidate);
+                    }
+                }
+            }
+        }
+    }
+
+    max_seqid.unwrap_or_else(|| "".into())
+}
+
 #[tauri::command]
 async fn open_login_window(app: AppHandle, provider: Option<String>) {
     let provider = provider.unwrap_or_else(|| "hypergryph".to_string());
@@ -312,7 +395,12 @@ fn init_user_record(uid: String) -> Result<String, String> {
         return Ok("Record already exists".into());
     }
 
-    let init_data = serde_json::json!({ "character": {}, "weapon": {} });
+    let init_data = serde_json::json!({
+        "character_max_seqid": "",
+        "weapon_max_seqid": "",
+        "character": {},
+        "weapon": {}
+    });
     let json_string = serde_json::to_string_pretty(&init_data).map_err(|e| e.to_string())?;
     fs::write(file_path, json_string).map_err(|e| e.to_string())?;
     Ok("Record initialized".into())
@@ -326,6 +414,8 @@ fn save_char_records(uid: String, data: serde_json::Value) -> Result<String, Str
 
     let mut full_data = load_full_record(&uid)?;
     full_data["character"] = data;
+    let max_seqid = calc_max_seqid_from_records(&full_data["character"]);
+    full_data["character_max_seqid"] = serde_json::json!(max_seqid);
 
     let file_path = get_record_path(&uid)?;
     let json_string = serde_json::to_string_pretty(&full_data).map_err(|e| e.to_string())?;
@@ -351,12 +441,70 @@ fn save_weapon_records(uid: String, data: serde_json::Value) -> Result<String, S
     let mut full_data = load_full_record(&uid)?;
 
     full_data["weapon"] = data;
+    let max_seqid = calc_max_seqid_from_records(&full_data["weapon"]);
+    full_data["weapon_max_seqid"] = serde_json::json!(max_seqid);
 
     let file_path = get_record_path(&uid)?;
     let json_string = serde_json::to_string_pretty(&full_data).map_err(|e| e.to_string())?;
     fs::write(file_path, json_string).map_err(|e| e.to_string())?;
 
     Ok(format!("UID {} weapon data saved", uid))
+}
+
+#[command]
+fn read_char_max_seqid(uid: String) -> Result<String, String> {
+    if uid.trim().is_empty() {
+        return Err("UID cannot be empty".into());
+    }
+
+    let file_path = get_record_path(&uid)?;
+    if !file_path.exists() {
+        return Ok("".into());
+    }
+
+    let mut full_data = load_full_record(&uid)?;
+    if let Some(v) = full_data.get("character_max_seqid").and_then(|x| x.as_str()) {
+        let s = v.trim();
+        if !s.is_empty() {
+            return Ok(s.to_string());
+        }
+    }
+
+    let computed = calc_max_seqid_from_records(full_data.get("character").unwrap_or(&serde_json::json!({})));
+    if !computed.is_empty() {
+        full_data["character_max_seqid"] = serde_json::json!(computed.clone());
+        let json_string = serde_json::to_string_pretty(&full_data).map_err(|e| e.to_string())?;
+        fs::write(file_path, json_string).map_err(|e| e.to_string())?;
+    }
+    Ok(computed)
+}
+
+#[command]
+fn read_weapon_max_seqid(uid: String) -> Result<String, String> {
+    if uid.trim().is_empty() {
+        return Err("UID cannot be empty".into());
+    }
+
+    let file_path = get_record_path(&uid)?;
+    if !file_path.exists() {
+        return Ok("".into());
+    }
+
+    let mut full_data = load_full_record(&uid)?;
+    if let Some(v) = full_data.get("weapon_max_seqid").and_then(|x| x.as_str()) {
+        let s = v.trim();
+        if !s.is_empty() {
+            return Ok(s.to_string());
+        }
+    }
+
+    let computed = calc_max_seqid_from_records(full_data.get("weapon").unwrap_or(&serde_json::json!({})));
+    if !computed.is_empty() {
+        full_data["weapon_max_seqid"] = serde_json::json!(computed.clone());
+        let json_string = serde_json::to_string_pretty(&full_data).map_err(|e| e.to_string())?;
+        fs::write(file_path, json_string).map_err(|e| e.to_string())?;
+    }
+    Ok(computed)
 }
 
 #[command]
@@ -431,8 +579,10 @@ pub fn run() {
             init_user_record,
             save_char_records,
             read_char_records,
+            read_char_max_seqid,
             save_weapon_records,
             read_weapon_records,
+            read_weapon_max_seqid,
             read_pool_info,
             save_pool_info,
             get_os,

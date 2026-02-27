@@ -41,6 +41,18 @@ export const useGachaRecords = (params?: { loadPoolInfo?: () => Promise<void> })
     }
   };
 
+  const readMaxSeqIdFromMeta = async (uid: string, type: "char" | "weapon") => {
+    const command =
+      type === "char" ? "read_char_max_seqid" : "read_weapon_max_seqid";
+    try {
+      const res = await invoke<string>(command, { uid });
+      return String(res || "").trim();
+    } catch (e) {
+      console.error(e);
+      return "";
+    }
+  };
+
   const getGlobalMaxSeqId = (allData: Record<string, GachaItem[]>) => {
     let maxSeqId = "";
     for (const list of Object.values(allData)) {
@@ -130,6 +142,7 @@ export const useGachaRecords = (params?: { loadPoolInfo?: () => Promise<void> })
     loadUserData,
     saveUserData,
     readUserDataRaw,
+    readMaxSeqIdFromMeta,
     getGlobalMaxSeqIdFromRaw: async (uid: string, type: "char" | "weapon") => {
       const allData = (await readUserDataRaw(uid, type)) as Record<
         string,

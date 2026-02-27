@@ -3,8 +3,12 @@
     <UContainer class="my-3 space-y-4">
       <div class="flex justify-between items-center">
         <div class="flex items-center gap-2">
-          <UButton @click="onSyncClick" color="primary" :loading="isSyncing" :disabled="isSyncing">
-            {{ isSyncing ? '同步中...' : '同步最新数据' }}
+          <UButton @click="onSyncClick" color="primary" :loading="syncMode === 'latest' && isSyncing" :disabled="isSyncing">
+            {{ isSyncing && syncMode === 'latest' ? '同步中...' : '同步最新数据' }}
+          </UButton>
+          <UButton @click="onFullBackupClick" color="neutral" variant="outline" :loading="syncMode === 'full' && isSyncing"
+            :disabled="isSyncing">
+            {{ isSyncing && syncMode === 'full' ? '同步中...' : '全量同步' }}
           </UButton>
           <AddAccount @success="handleAccountAdded"></AddAccount>
           <SelectAccount v-model="uid"></SelectAccount>
@@ -47,6 +51,11 @@ const { loadConfig, currentUser: uid } = useUserStore();
 const { isWindows, detect: detectPlatform } = usePlatform();
 const { updateHint, checkForUpdate } = useUpdate();
 const route = useRoute()
+const syncMode = ref<'latest' | 'full' | null>(null)
+
+watch(isSyncing, (v) => {
+  if (!v) syncMode.value = null
+})
 const settingBackTo = computed(() => {
   const raw = route.query.from
   const from = Array.isArray(raw) ? raw[0] : raw
@@ -101,7 +110,13 @@ onMounted(async () => {
 });
 
 const onSyncClick = () => {
+  syncMode.value = 'latest'
   handleSync(uid.value, gachaType.value);
+}
+
+const onFullBackupClick = () => {
+  syncMode.value = 'full'
+  handleSync(uid.value, gachaType.value, { full: true })
 }
 
 const open = async (url: string) => {

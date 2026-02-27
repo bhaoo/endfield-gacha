@@ -56,8 +56,8 @@ export const useGachaSync = () => {
     weaponRecords,
     loadUserData,
     saveUserData,
+    readMaxSeqIdFromMeta,
     getGlobalMaxSeqIdFromRaw,
-    getMaxSeqIdByPoolKeyFromRaw,
   } = useGachaRecords({ loadPoolInfo });
 
   const {
@@ -90,10 +90,15 @@ export const useGachaSync = () => {
     poolInfo,
   });
 
-  const handleSync = async (uid: string, type: "char" | "weapon" = "char") => {
+  const handleSync = async (
+    uid: string,
+    type: "char" | "weapon" = "char",
+    options?: { full?: boolean },
+  ) => {
     if (isSyncing.value) return;
+    const actionLabel = options?.full ? "全量备份" : "同步";
     if (!uid || uid === "none") {
-      showToast("同步失败", "请先选择一个账号");
+      showToast(`${actionLabel}失败`, "请先选择一个账号");
       return;
     }
 
@@ -101,7 +106,7 @@ export const useGachaSync = () => {
     await loadPoolInfo();
     if (isSystemUid(uid) && !isWindows.value) {
       showToast(
-        "同步失败",
+        `${actionLabel}失败`,
         "system 账号仅支持 Windows。请通过“添加账号”方式登录后同步。",
       );
       return;
@@ -113,7 +118,7 @@ export const useGachaSync = () => {
       const existing = findConfigUserByKey(config, uid);
       if (existing && (!existing.token || existing.source === "log")) {
         showToast(
-          "无法同步",
+          `无法${actionLabel}`,
           "该账号来自日志识别，请选择 system(国服) 或 system(国际服) 进行日志同步，或使用“添加账号”登录后再同步。",
         );
         return;
@@ -123,8 +128,10 @@ export const useGachaSync = () => {
     isSyncing.value = true;
     syncProgress.value = { type, poolName: "", page: 0 };
     showToast(
-      "同步开始",
-      `正在获取${type === "char" ? "干员" : "武器"}数据...`,
+      `${actionLabel}开始`,
+      options?.full
+        ? `将全量获取${type === "char" ? "干员" : "武器"}数据（耗时较长），用于修复历史遗漏数据。`
+        : `正在获取${type === "char" ? "干员" : "武器"}数据...`,
     );
 
     try {
@@ -178,14 +185,14 @@ export const useGachaSync = () => {
       }
       if (!auth) throw new Error("Token 获取失败，请重新登录");
 
-      const stopSeqId =
-        type === "char"
-          ? await getGlobalMaxSeqIdFromRaw(effectiveUid, "char")
-          : "";
-      const stopSeqIdByPoolId =
-        type === "weapon"
-          ? await getMaxSeqIdByPoolKeyFromRaw(effectiveUid, "weapon")
-          : {};
+      const useWatermark = !options?.full;
+      let stopSeqId = useWatermark
+        ? await readMaxSeqIdFromMeta(effectiveUid, type)
+        : "";
+      if (useWatermark && !stopSeqId) {
+        // fallback: 旧数据文件可能未写入 max_seqid
+        stopSeqId = await getGlobalMaxSeqIdFromRaw(effectiveUid, type);
+      }
 
       let count = 0;
       if (type === "char") {
@@ -202,16 +209,22 @@ export const useGachaSync = () => {
           auth.u8Token,
           auth.provider,
           auth.serverId,
-          { stopSeqIdByPoolId },
+          { stopSeqId },
         );
       }
 
       await loadUserData(effectiveUid, type);
 
-      if (count > 0) showToast("同步成功", `新增 ${count} 条寻访记录！`);
-      else showToast("同步成功", "已经是最新的啦！如果是刚抽的话可能有延迟哦~");
+      if (count > 0) showToast(`${actionLabel}成功`, `新增 ${count} 条寻访记录！`);
+      else
+        showToast(
+          `${actionLabel}成功`,
+          options?.full
+            ? "已完成全量备份：未发现新增记录。"
+            : "已经是最新的啦！如果是刚抽的话可能有延迟哦~",
+        );
     } catch (err: any) {
-      showToast("同步失败", err.message || "未知错误");
+      showToast(`${actionLabel}失败`, err.message || "未知错误");
       console.error(err);
     } finally {
       isSyncing.value = false;
