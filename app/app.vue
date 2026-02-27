@@ -23,6 +23,20 @@
           </UBadge>
         </div>
         <div class="flex items-center gap-2">
+          <div
+            v-if="hasCharGachaData"
+            class="rounded-md font-medium inline-flex items-center text-sm ring ring-red-300 ring-inset text-default bg-default p-1.5"
+          >
+            <img class="block w-5 h-5 relative top-0.4 mr-1" src="assets/images/oroberyl.png" />
+            <span class="tabular-nums">{{ oroberylCostDisplay }}</span>
+          </div>
+          <div
+            v-if="hasWeaponGachaData"
+            class="rounded-md font-medium inline-flex items-center text-sm ring ring-blue-300 ring-inset text-default bg-default p-1.5"
+          >
+            <img class="block w-5 h-5 relative top-0.4 mr-1" src="assets/images/arsenal_ticket.png" />
+            <span class="tabular-nums">{{ arsenalTicketCostDisplay }}</span>
+          </div>
           <ColorMode />
           <NuxtLink v-if="route.path === '/setting'" :to="settingBackTo">
             <UButton icon="i-lucide-arrow-left" label="返回" color="neutral" variant="outline" />
@@ -52,6 +66,57 @@ const { isWindows, detect: detectPlatform } = usePlatform();
 const { updateHint, checkForUpdate } = useUpdate();
 const route = useRoute()
 const syncMode = ref<'latest' | 'full' | null>(null)
+const CHARACTER_OROBERYL_PER_PULL = 500
+const WEAPON_ARSENAL_TICKET_PER_TEN_PULL = 1980
+const WEAPON_ARSENAL_TICKET_PER_PULL = WEAPON_ARSENAL_TICKET_PER_TEN_PULL / 10
+
+const summarizeTotalPulls = (records: Record<string, any[]> | undefined | null) => {
+  let total = 0
+  for (const list of Object.values(records || {})) {
+    if (!Array.isArray(list) || list.length <= 0) continue
+    total += list.length
+  }
+  return total
+}
+
+const summarizeCharPaidPulls = (records: Record<string, any[]> | undefined | null) => {
+  let paid = 0
+  for (const list of Object.values(records || {})) {
+    if (!Array.isArray(list) || list.length <= 0) continue
+    for (const it of list) {
+      // 角色池：不计算免费抽（isFree === true）
+      if (it && it.isFree === true) continue
+      paid++
+    }
+  }
+  return paid
+}
+
+const charTotalPulls = computed(() => summarizeTotalPulls(charRecords.value as any))
+const charPaidPulls = computed(() => summarizeCharPaidPulls(charRecords.value as any))
+const weaponTotalPulls = computed(() => summarizeTotalPulls(weaponRecords.value as any))
+
+const hasCharGachaData = computed(() => charTotalPulls.value > 0)
+const hasWeaponGachaData = computed(() => weaponTotalPulls.value > 0)
+
+const oroberylCost = computed(() => charPaidPulls.value * CHARACTER_OROBERYL_PER_PULL)
+const arsenalTicketCost = computed(() =>
+  Math.round(weaponTotalPulls.value * WEAPON_ARSENAL_TICKET_PER_PULL),
+)
+
+const formatK = (value: number) => {
+  if (!Number.isFinite(value)) return '0'
+  if (value > 99000) {
+    // 截断到 0.1k，避免四舍五入显示比实际更高
+    const k = Math.floor(value / 100) / 10
+    const s = Number.isInteger(k) ? k.toFixed(0) : k.toFixed(1)
+    return `${s.replace(/\.0$/, '')}k`
+  }
+  return String(value)
+}
+
+const oroberylCostDisplay = computed(() => formatK(oroberylCost.value))
+const arsenalTicketCostDisplay = computed(() => formatK(arsenalTicketCost.value))
 
 watch(isSyncing, (v) => {
   if (!v) syncMode.value = null
