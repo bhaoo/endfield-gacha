@@ -178,6 +178,7 @@
 <script setup lang="ts">
 import { isSystemUid, systemUidLabel, SYSTEM_UID_CN } from '~/utils/systemAccount'
 import type { GachaStatistics } from '~/types/gacha'
+import { sortHistory6Desc } from '~/utils/historySort'
 
 const { currentUser: uid } = useUserStore()
 const { charStatistics: statistics } = useGachaSync();
@@ -259,8 +260,7 @@ const allSpecialStat = computed<GachaStatistics | undefined>(() => {
   const count5 = list.reduce((sum, s) => sum + (s.count5 || 0), 0)
   const count4 = list.reduce((sum, s) => sum + (s.count4 || 0), 0)
 
-  // 直接按“池段”拼接：specialStats 本身按时间段分组（最新池在前），拼接后大体符合时间顺序。
-  const history6 = list.flatMap((s) => s.history6 || [])
+  const history6 = sortHistory6Desc(list.flatMap((s) => s.history6 || []))
 
   return {
     poolType: SPECIAL_POOL_TYPE,

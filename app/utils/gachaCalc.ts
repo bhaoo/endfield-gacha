@@ -49,7 +49,11 @@ export const analyzePoolData = (poolKey: string, rawData: EndFieldCharInfo[]): G
       historyRecords.push({
         name: item.charName,
         pity: pullsSinceLast6,
-        isNew: item.isNew
+        isNew: item.isNew,
+        gachaTs: item.gachaTs,
+        seqId: item.seqId,
+        poolId: item.poolId,
+        poolName: item.poolName,
       });
       pullsSinceLast6 = 0;
     } else if (item.rarity === 5) {
@@ -160,6 +164,8 @@ export const analyzeSpecialPoolData = (
         poolId: current.poolId,
         poolName: current.poolName,
         up6Id: current.up6Id || undefined,
+        gachaTs: item.gachaTs,
+        seqId: item.seqId,
       });
 
       if (current.up6Id && item.charId === current.up6Id) current.gotUp6 = true;
@@ -209,6 +215,8 @@ export const analyzeWeaponPoolData = (
         poolId: poolKey,
         poolName: item.poolName || poolKey,
         up6Id: up6Id || undefined,
+        gachaTs: item.gachaTs,
+        seqId: item.seqId,
       });
 
       if (up6Id && item.weaponId === up6Id) gotUp6 = true;

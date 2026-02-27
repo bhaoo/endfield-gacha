@@ -1,5 +1,6 @@
 import type { ComputedRef } from 'vue'
 import type { GachaStatistics } from '~/types/gacha'
+import { sortHistory6Desc } from '~/utils/historySort'
 
 type SelectItem = { label: string; value: string }
 
@@ -69,7 +70,7 @@ export const usePoolSelector = (params: {
     const count6 = list.reduce((sum, s) => sum + (s.count6 || 0), 0)
     const count5 = list.reduce((sum, s) => sum + (s.count5 || 0), 0)
     const count4 = list.reduce((sum, s) => sum + (s.count4 || 0), 0)
-    const history6 = list.flatMap((s) => s.history6 || [])
+    const history6 = sortHistory6Desc(list.flatMap((s) => s.history6 || []))
 
     return {
       poolName: allLabel,
@@ -103,4 +104,3 @@ export const usePoolSelector = (params: {
     selectedStat,
   }
 }
-
