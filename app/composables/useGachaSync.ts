@@ -32,6 +32,7 @@ export const useGachaSync = () => {
   const user_agent = ref(
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.112 Safari/537.36",
   );
+  const activeSyncActionLabel = ref("同步");
 
   const currentUid = useState<string>("current-uid", () => "none");
 
@@ -78,6 +79,14 @@ export const useGachaSync = () => {
   const { syncCharacters, syncWeapons } = createGachaApi({
     userAgent: user_agent,
     syncProgress,
+    onPageRetryExhausted: ({ type, poolName, page, reason }) => {
+      const poolTypeLabel = type === "char" ? "角色池" : "武器池";
+      const reasonText = reason ? ` 原因：${reason}` : "";
+      showToast(
+        `${activeSyncActionLabel.value}中出现分页失败`,
+        `${poolTypeLabel}「${poolName}」第 ${page} 页重试 3 次后仍失败。${reasonText}`,
+      );
+    },
     ensureCharPoolInfoForPoolIds,
     ensureWeaponPoolInfoForPoolId,
     saveUserData,
@@ -97,6 +106,7 @@ export const useGachaSync = () => {
   ) => {
     if (isSyncing.value) return;
     const actionLabel = options?.full ? "全量备份" : "同步";
+    activeSyncActionLabel.value = actionLabel;
     if (!uid || uid === "none") {
       showToast(`${actionLabel}失败`, "请先选择一个账号");
       return;
@@ -194,41 +204,69 @@ export const useGachaSync = () => {
         stopSeqId = await getGlobalMaxSeqIdFromRaw(effectiveUid, type);
       }
 
-      let count = 0;
-      if (type === "char") {
-        count = await syncCharacters(
-          effectiveUid,
-          auth.u8Token,
-          auth.provider,
-          auth.serverId,
-          { stopSeqId },
-        );
-      } else {
-        count = await syncWeapons(
-          effectiveUid,
-          auth.u8Token,
-          auth.provider,
-          auth.serverId,
-          { stopSeqId },
-        );
-      }
+      const syncResult =
+        type === "char"
+          ? await syncCharacters(
+              effectiveUid,
+              auth.u8Token,
+              auth.provider,
+              auth.serverId,
+              { stopSeqId },
+            )
+          : await syncWeapons(
+              effectiveUid,
+              auth.u8Token,
+              auth.provider,
+              auth.serverId,
+              { stopSeqId },
+            );
 
       await loadUserData(effectiveUid, type);
 
-      if (count > 0) showToast(`${actionLabel}成功`, `新增 ${count} 条寻访记录！`);
-      else
+      const failedPoolsText = syncResult.failedPools.length
+        ? `失败池：${syncResult.failedPools.join("、")}`
+        : "";
+      const reasonText = syncResult.failureReason
+        ? `；原因：${syncResult.failureReason}`
+        : "";
+
+      if (syncResult.status === "success") {
+        if (syncResult.count > 0) {
+          showToast(`${actionLabel}成功`, `新增 ${syncResult.count} 条寻访记录！`);
+        } else {
+          showToast(
+            `${actionLabel}成功`,
+            options?.full
+              ? "未发现新增记录。"
+              : "已经是最新的啦！如果是刚抽的话可能有延迟哦~",
+          );
+        }
+      } else if (syncResult.status === "partial_failed") {
+        const baseMsg =
+          syncResult.count > 0
+            ? `新增 ${syncResult.count} 条记录，但存在部分分页获取失败。`
+            : "未获取到新增记录哦，且存在部分分页获取失败。";
         showToast(
-          `${actionLabel}成功`,
-          options?.full
-            ? "已完成全量备份：未发现新增记录。"
-            : "已经是最新的啦！如果是刚抽的话可能有延迟哦~",
+          `${actionLabel}部分失败`,
+          [baseMsg, failedPoolsText, reasonText].filter(Boolean).join(" "),
         );
+      } else {
+        const failMsg =
+          syncResult.count > 0
+            ? `新增 ${syncResult.count} 条记录，但所有池都未完整成功。`
+            : "所有分页在重试 3 次后仍获取失败。";
+        showToast(
+          `${actionLabel}全部失败`,
+          [failMsg, failedPoolsText, reasonText].filter(Boolean).join(" "),
+        );
+      }
     } catch (err: any) {
       showToast(`${actionLabel}失败`, err.message || "未知错误");
       console.error(err);
     } finally {
       isSyncing.value = false;
       syncProgress.value = { type: null, poolName: "", page: 0 };
+      activeSyncActionLabel.value = "同步";
     }
   };
 
