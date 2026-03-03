@@ -37,7 +37,6 @@
             <img class="block w-5 h-5 relative top-0.4 mr-1" src="assets/images/arsenal_ticket.png" />
             <span class="tabular-nums">{{ arsenalTicketCostDisplay }}</span>
           </div>
-          <ColorMode />
           <NuxtLink v-if="route.path === '/setting'" :to="settingBackTo">
             <UButton icon="i-lucide-arrow-left" label="返回" color="neutral" variant="outline" />
           </NuxtLink>

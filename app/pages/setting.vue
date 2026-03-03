@@ -50,6 +50,20 @@
     <UCard>
       <template #header>
         <div class="flex items-center gap-2">
+          <UIcon name="i-lucide-sliders-horizontal" class="text-gray-500" />
+          <span class="font-semibold">相关配置</span>
+        </div>
+      </template>
+
+      <div class="flex items-center justify-between gap-4">
+        <span class="text-sm">主题模式</span>
+        <ColorMode />
+      </div>
+    </UCard>
+
+    <UCard>
+      <template #header>
+        <div class="flex items-center gap-2">
           <UIcon name="i-lucide-info" class="text-gray-500" />
           <span class="font-semibold">更多信息</span>
         </div>
