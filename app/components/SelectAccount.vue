@@ -11,7 +11,13 @@ const { uidList, loadConfig, currentUser } = useUserStore()
 const { isWindows, detect: detectPlatform } = usePlatform()
 
 const ensureSelected = () => {
-  if ((!uid.value || uid.value === 'none') && uidList.value.length > 0) {
+  if (uidList.value.length === 0) {
+    uid.value = 'none'
+    return
+  }
+
+  const hasValidSelection = uidList.value.some((item) => item.value === uid.value)
+  if ((!uid.value || uid.value === 'none' || !hasValidSelection) && uidList.value.length > 0) {
     uid.value = uidList.value[0]!.value
   }
 }

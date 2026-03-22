@@ -17,6 +17,13 @@ export const useUserStore = () => {
   const getUserKey = (u: User) =>
     u.key || (u.roleId?.roleId ? `${u.uid}_${u.roleId.roleId}` : u.uid);
 
+  // 下拉框只展示完成角色绑定的账号，隐藏只有 UID 没有 roleId 的旧记录。
+  const shouldShowInAccountSelect = (u: User) => {
+    const hasUid = Boolean(String(u.uid || "").trim());
+    const hasRoleId = Boolean(String(u.roleId?.roleId || "").trim());
+    return !hasUid || hasRoleId;
+  };
+
   const uidList = computed(() =>
     [
       ...(isWindows.value
@@ -26,6 +33,7 @@ export const useUserStore = () => {
           ]
         : []),
       ...userList.value
+        .filter(shouldShowInAccountSelect)
         .map((u) => ({
           label:
             u.roleId?.nickName && u.roleId?.roleId
