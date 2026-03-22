@@ -2,9 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 import type { AppConfig, User } from "~/types/gacha";
 import {
   isSystemUid,
-  systemUidLabel,
-  SYSTEM_UID_CN,
-  SYSTEM_UID_GLOBAL,
 } from "~/utils/systemAccount";
 
 export const useUserStore = () => {
@@ -17,15 +14,28 @@ export const useUserStore = () => {
   const getUserKey = (u: User) =>
     u.key || (u.roleId?.roleId ? `${u.uid}_${u.roleId.roleId}` : u.uid);
 
+  // 暂停日志同步入口
+  const enableSystemAccountSelectEntry = false;
+
+  // 下拉框只展示完成角色绑定且非日志来源的账号。
+  const shouldShowInAccountSelect = (u: User) => {
+    const hasUid = Boolean(String(u.uid || "").trim());
+    const hasRoleId = Boolean(String(u.roleId?.roleId || "").trim());
+    const isLogSource = u.source === "log";
+    return (!hasUid || hasRoleId) && !isLogSource;
+  };
+
   const uidList = computed(() =>
     [
-      ...(isWindows.value
+      ...(enableSystemAccountSelectEntry && isWindows.value
         ? [
-            { label: systemUidLabel(SYSTEM_UID_CN), value: SYSTEM_UID_CN },
-            { label: systemUidLabel(SYSTEM_UID_GLOBAL), value: SYSTEM_UID_GLOBAL },
+            // 暂停从客户端日志直接识别账号的入口
+            // { label: systemUidLabel(SYSTEM_UID_CN), value: SYSTEM_UID_CN },
+            // { label: systemUidLabel(SYSTEM_UID_GLOBAL), value: SYSTEM_UID_GLOBAL },
           ]
         : []),
       ...userList.value
+        .filter(shouldShowInAccountSelect)
         .map((u) => ({
           label:
             u.roleId?.nickName && u.roleId?.roleId

@@ -37,7 +37,6 @@
             <img class="block w-5 h-5 relative top-0.4 mr-1" src="assets/images/arsenal_ticket.png" />
             <span class="tabular-nums">{{ arsenalTicketCostDisplay }}</span>
           </div>
-          <ColorMode />
           <NuxtLink v-if="route.path === '/setting'" :to="settingBackTo">
             <UButton icon="i-lucide-arrow-left" label="返回" color="neutral" variant="outline" />
           </NuxtLink>
@@ -48,6 +47,39 @@
           </NuxtLink>
         </div>
       </div>
+
+      <UModal
+        v-model:open="isFullSyncConfirmOpen"
+        title="全量同步"
+      >
+        <template #body>
+          <p class="text-sm text-gray-600 dark:text-gray-400">
+            全量同步会重新拉取当前卡池的全部记录，耗时更长，是否继续？
+            <br/>建议仅在<b>数据异常或需要完整重建</b>时使用该功能。
+          </p>
+        </template>
+
+        <template #footer>
+          <div class="flex w-full justify-end gap-2">
+            <UButton
+              color="neutral"
+              variant="ghost"
+              :disabled="isSyncing"
+              @click="isFullSyncConfirmOpen = false"
+            >
+              取消
+            </UButton>
+            <UButton
+              color="error"
+              :loading="syncMode === 'full' && isSyncing"
+              :disabled="isSyncing"
+              @click="onConfirmFullBackup"
+            >
+              确认全量同步
+            </UButton>
+          </div>
+        </template>
+      </UModal>
 
       <NuxtPage />
 
@@ -66,6 +98,7 @@ const { isWindows, detect: detectPlatform } = usePlatform();
 const { updateHint, checkForUpdate } = useUpdate();
 const route = useRoute()
 const syncMode = ref<'latest' | 'full' | null>(null)
+const isFullSyncConfirmOpen = ref(false)
 const isUserDataLoading = useState<boolean>('gacha-user-data-loading', () => false)
 let userDataLoadSeq = 0
 
@@ -195,6 +228,13 @@ const onSyncClick = () => {
 }
 
 const onFullBackupClick = () => {
+  if (isSyncing.value) return
+  isFullSyncConfirmOpen.value = true
+}
+
+const onConfirmFullBackup = () => {
+  if (isSyncing.value) return
+  isFullSyncConfirmOpen.value = false
   syncMode.value = 'full'
   handleSync(uid.value, gachaType.value, { full: true })
 }

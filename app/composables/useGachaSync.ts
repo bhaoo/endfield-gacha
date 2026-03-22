@@ -1,5 +1,5 @@
-import { invoke } from "@tauri-apps/api/core";
-import type { AppConfig } from "~/types/gacha";
+﻿import { invoke } from "@tauri-apps/api/core";
+import type { AppConfig, User } from "~/types/gacha";
 import type { GachaAuth } from "~/composables/gacha";
 import {
   isSystemUid,
@@ -32,6 +32,7 @@ export const useGachaSync = () => {
   const user_agent = ref(
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.6422.112 Safari/537.36",
   );
+  const activeSyncActionLabel = ref("同步");
 
   const currentUid = useState<string>("current-uid", () => "none");
 
@@ -40,6 +41,12 @@ export const useGachaSync = () => {
       title: title,
       description: desc,
     });
+  };
+
+  const extractRoleIdFromUserKey = (userKey: string) => {
+    const sepIndex = userKey.indexOf("_");
+    if (sepIndex < 0 || sepIndex >= userKey.length - 1) return "";
+    return userKey.slice(sepIndex + 1).trim();
   };
 
   const {
@@ -78,6 +85,14 @@ export const useGachaSync = () => {
   const { syncCharacters, syncWeapons } = createGachaApi({
     userAgent: user_agent,
     syncProgress,
+    onPageRetryExhausted: ({ type, poolName, page, reason }) => {
+      const poolTypeLabel = type === "char" ? "角色池" : "武器池";
+      const reasonText = reason ? ` 原因：${reason}` : "";
+      showToast(
+        `${activeSyncActionLabel.value}中出现分页失败`,
+        `${poolTypeLabel}「${poolName}」第 ${page} 页重试 3 次后仍失败。${reasonText}`,
+      );
+    },
     ensureCharPoolInfoForPoolIds,
     ensureWeaponPoolInfoForPoolId,
     saveUserData,
@@ -97,6 +112,7 @@ export const useGachaSync = () => {
   ) => {
     if (isSyncing.value) return;
     const actionLabel = options?.full ? "全量备份" : "同步";
+    activeSyncActionLabel.value = actionLabel;
     if (!uid || uid === "none") {
       showToast(`${actionLabel}失败`, "请先选择一个账号");
       return;
@@ -104,6 +120,8 @@ export const useGachaSync = () => {
 
     await detectPlatform();
     await loadPoolInfo();
+    let logSystemUid: string | null = null;
+    let selectedLogUser: User | null = null;
     if (isSystemUid(uid) && !isWindows.value) {
       showToast(
         `${actionLabel}失败`,
@@ -117,13 +135,22 @@ export const useGachaSync = () => {
       const config = await invoke<AppConfig>("read_config");
       const existing = findConfigUserByKey(config, uid);
       if (existing && (!existing.token || existing.source === "log")) {
-        showToast(
-          `无法${actionLabel}`,
-          "该账号来自日志识别，请选择 system(国服) 或 system(国际服) 进行日志同步，或使用“添加账号”登录后再同步。",
-        );
-        return;
+        const provider =
+          existing.provider === "gryphline" ? "gryphline" : "hypergryph";
+        logSystemUid =
+          provider === "gryphline" ? SYSTEM_UID_GLOBAL : SYSTEM_UID_CN;
+        selectedLogUser = existing;
       }
     }
+
+    if (logSystemUid && !isWindows.value) {
+      showToast(
+        `${actionLabel}失败`,
+        "system 账号仅支持 Windows。请通过“添加账号”方式登录后同步。",
+      );
+      return;
+    }
+    const systemSyncUid = isSystemUid(uid) ? uid : logSystemUid;
 
     isSyncing.value = true;
     syncProgress.value = { type, poolName: "", page: 0 };
@@ -138,32 +165,69 @@ export const useGachaSync = () => {
       let effectiveUid = uid;
       let auth: GachaAuth | null = null;
 
-      if (isSystemUid(uid)) {
-        const systemAuth = await getSystemAuthFromLog(uid);
-        const config = await invoke<AppConfig>("read_config");
-        const existing = findConfigUserByKey(
-          config,
-          systemAuth.detectedUserKey,
-        );
-        if (!existing) {
-          await upsertLogUser(systemAuth);
+      if (systemSyncUid) {
+        const systemAuth = await getSystemAuthFromLog(systemSyncUid);
+
+        if (selectedLogUser) {
+          const expectedNickName = String(
+            selectedLogUser.roleId?.nickName || "",
+          ).trim();
+          const expectedUid = String(selectedLogUser.uid || "").trim();
+          const expectedRoleId =
+            String(selectedLogUser.roleId?.roleId || "").trim() ||
+            extractRoleIdFromUserKey(uid);
+          const detectedNickName = String(systemAuth.roleName || "").trim();
+          const detectedUid = String(systemAuth.detectedUid || "").trim();
+          const detectedRoleId = String(systemAuth.detectedRoleId || "").trim();
+
+          const isUidMatched = expectedUid !== "" && expectedUid === detectedUid;
+          const isRoleMatched =
+            expectedRoleId !== "" && expectedRoleId === detectedRoleId;
+
+          if (!isUidMatched || !isRoleMatched) {
+            const expectedDisplay = `${expectedNickName || "unknown"}(${expectedRoleId || "unknown"})`;
+            const detectedDisplay = `${detectedNickName || "unknown"}(${detectedRoleId || "unknown"})`;
+            showToast(
+              `无法${actionLabel}`,
+              `当前账号 ${expectedDisplay} 与当前日志中的账号 ${detectedDisplay} 不一致，请在游戏中打开寻访记录后重试。`,
+            );
+            return;
+          }
+        }
+        if (!selectedLogUser) {
+          const config = await invoke<AppConfig>("read_config");
+          const existing = findConfigUserByKey(
+            config,
+            systemAuth.detectedUserKey,
+          );
+          if (!existing) {
+            await upsertLogUser(systemAuth);
+          } else {
+            await initUserRecord(systemAuth.detectedUserKey);
+          }
+
+          effectiveUid = systemAuth.detectedUserKey;
+          currentUid.value = effectiveUid;
         } else {
-          await initUserRecord(systemAuth.detectedUserKey);
+          effectiveUid = uid;
+          currentUid.value = uid;
         }
 
-        effectiveUid = systemAuth.detectedUserKey;
-        currentUid.value = effectiveUid;
-
         const isMainSystemUid =
-          uid === SYSTEM_UID_CN || uid === SYSTEM_UID_GLOBAL;
+          systemSyncUid === SYSTEM_UID_CN || systemSyncUid === SYSTEM_UID_GLOBAL;
         const isLegacySystemUid =
-          uid === SYSTEM_UID_AUTO ||
-          uid === SYSTEM_UID_OFFICIAL ||
-          uid === SYSTEM_UID_BILIBILI;
+          systemSyncUid === SYSTEM_UID_AUTO ||
+          systemSyncUid === SYSTEM_UID_OFFICIAL ||
+          systemSyncUid === SYSTEM_UID_BILIBILI;
 
         const regionLabel = systemRegionLabel(systemAuth);
 
-        if (isMainSystemUid) {
+        if (selectedLogUser) {
+          showToast(
+            "日志账号校验通过",
+            `开始同步！`,
+          );
+        } else if (isMainSystemUid) {
           const extra =
             systemAuth.provider === "hypergryph"
               ? systemAuth.channelLabel
@@ -175,7 +239,7 @@ export const useGachaSync = () => {
         } else if (isLegacySystemUid) {
           showToast(
             "system 入口已调整",
-            `当前选择的是 ${systemUidLabel(uid)}，本次将按 ${regionLabel} 方式同步`,
+            `当前选择的是 ${systemUidLabel(systemSyncUid)}，本次将按 ${regionLabel} 方式同步`,
           );
         }
 
@@ -194,41 +258,69 @@ export const useGachaSync = () => {
         stopSeqId = await getGlobalMaxSeqIdFromRaw(effectiveUid, type);
       }
 
-      let count = 0;
-      if (type === "char") {
-        count = await syncCharacters(
-          effectiveUid,
-          auth.u8Token,
-          auth.provider,
-          auth.serverId,
-          { stopSeqId },
-        );
-      } else {
-        count = await syncWeapons(
-          effectiveUid,
-          auth.u8Token,
-          auth.provider,
-          auth.serverId,
-          { stopSeqId },
-        );
-      }
+      const syncResult =
+        type === "char"
+          ? await syncCharacters(
+              effectiveUid,
+              auth.u8Token,
+              auth.provider,
+              auth.serverId,
+              { stopSeqId },
+            )
+          : await syncWeapons(
+              effectiveUid,
+              auth.u8Token,
+              auth.provider,
+              auth.serverId,
+              { stopSeqId },
+            );
 
       await loadUserData(effectiveUid, type);
 
-      if (count > 0) showToast(`${actionLabel}成功`, `新增 ${count} 条寻访记录！`);
-      else
+      const failedPoolsText = syncResult.failedPools.length
+        ? `失败池：${syncResult.failedPools.join("、")}`
+        : "";
+      const reasonText = syncResult.failureReason
+        ? `；原因：${syncResult.failureReason}`
+        : "";
+
+      if (syncResult.status === "success") {
+        if (syncResult.count > 0) {
+          showToast(`${actionLabel}成功`, `新增 ${syncResult.count} 条寻访记录！`);
+        } else {
+          showToast(
+            `${actionLabel}成功`,
+            options?.full
+              ? "未发现新增记录。"
+              : "已经是最新的啦！如果是刚抽的话可能有延迟哦~",
+          );
+        }
+      } else if (syncResult.status === "partial_failed") {
+        const baseMsg =
+          syncResult.count > 0
+            ? `新增 ${syncResult.count} 条记录，但存在部分分页获取失败。`
+            : "未获取到新增记录哦，且存在部分分页获取失败。";
         showToast(
-          `${actionLabel}成功`,
-          options?.full
-            ? "已完成全量备份：未发现新增记录。"
-            : "已经是最新的啦！如果是刚抽的话可能有延迟哦~",
+          `${actionLabel}部分失败`,
+          [baseMsg, failedPoolsText, reasonText].filter(Boolean).join(" "),
         );
+      } else {
+        const failMsg =
+          syncResult.count > 0
+            ? `新增 ${syncResult.count} 条记录，但所有池都未完整成功。`
+            : "所有分页在重试 3 次后仍获取失败。";
+        showToast(
+          `${actionLabel}全部失败`,
+          [failMsg, failedPoolsText, reasonText].filter(Boolean).join(" "),
+        );
+      }
     } catch (err: any) {
       showToast(`${actionLabel}失败`, err.message || "未知错误");
       console.error(err);
     } finally {
       isSyncing.value = false;
       syncProgress.value = { type: null, poolName: "", page: 0 };
+      activeSyncActionLabel.value = "同步";
     }
   };
 

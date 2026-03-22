@@ -541,62 +541,69 @@ fn read_pool_info() -> Result<serde_json::Value, String> {
 
     if !file_path.exists() {
         let default_data = serde_json::json!([
-          {
-            "pool_gacha_type": "char",
-            "pool_id": "special_1_0_1",
-            "pool_name": "熔火灼痕",
-            "pool_type": "special",
-            "up6_id": "chr_0016_laevat"
-          },
-          {
-            "pool_gacha_type": "weapon",
-            "pool_id": "weaponbox_constant_2",
-            "pool_name": "星声申领",
-            "pool_type": "constant",
-            "up6_id": "wpn_funnel_0013"
-          },
-          {
-            "pool_gacha_type": "weapon",
-            "pool_id": "weponbox_1_0_3",
-            "pool_name": "迅行申领",
-            "pool_type": "special",
-            "up6_id": "wpn_funnel_0011"
-          },
-          {
-            "pool_gacha_type": "char",
-            "pool_id": "special_1_0_3",
-            "pool_name": "轻飘飘的信使",
-            "pool_type": "special",
-            "up6_id": "chr_0013_aglina"
-          },
-          {
-            "pool_gacha_type": "weapon",
-            "pool_id": "weponbox_1_0_1",
-            "pool_name": "熔铸申领",
-            "pool_type": "special",
-            "up6_id": "wpn_sword_0006"
-          },
-          {
-            "pool_gacha_type": "weapon",
-            "pool_id": "weaponbox_constant_3",
-            "pool_name": "远途申领",
-            "pool_type": "constant",
-            "up6_id": "wpn_sword_0016"
-          },
-          {
-            "pool_gacha_type": "weapon",
-            "pool_id": "weponbox_1_0_2",
-            "pool_name": "绘涂申领",
-            "pool_type": "special",
-            "up6_id": "wpn_pistol_0010"
-          },
-          {
-            "pool_gacha_type": "char",
-            "pool_id": "special_1_0_2",
-            "pool_name": "热烈色彩",
-            "pool_type": "special",
-            "up6_id": "chr_0017_yvonne"
-          }
+            {
+                "pool_gacha_type": "char",
+                "pool_id": "special_1_0_1",
+                "pool_name": "熔火灼痕",
+                "pool_type": "special",
+                "up6_id": "chr_0016_laevat"
+            },
+            {
+                "pool_gacha_type": "char",
+                "pool_id": "special_1_0_3",
+                "pool_name": "轻飘飘的信使",
+                "pool_type": "special",
+                "up6_id": "chr_0013_aglina"
+            },
+            {
+                "pool_gacha_type": "char",
+                "pool_id": "special_1_0_2",
+                "pool_name": "热烈色彩",
+                "pool_type": "special",
+                "up6_id": "chr_0017_yvonne"
+            },
+            {
+                "pool_gacha_type": "weapon",
+                "pool_id": "weponbox_1_0_3",
+                "pool_name": "迅行申领",
+                "pool_type": "special",
+                "up6_id": "wpn_funnel_0011"
+            },
+            {
+                "pool_gacha_type": "weapon",
+                "pool_id": "weponbox_1_0_2",
+                "pool_name": "绘涂申领",
+                "pool_type": "special",
+                "up6_id": "wpn_pistol_0010"
+            },
+            {
+                "pool_gacha_type": "weapon",
+                "pool_id": "weponbox_1_0_1",
+                "pool_name": "熔铸申领",
+                "pool_type": "special",
+                "up6_id": "wpn_sword_0006"
+            },
+            {
+                "pool_gacha_type": "weapon",
+                "pool_id": "weaponbox_constant_2",
+                "pool_name": "星声申领",
+                "pool_type": "constant",
+                "up6_id": "wpn_funnel_0013"
+            },
+            {
+                "pool_gacha_type": "char",
+                "pool_id": "special_1_1_1",
+                "pool_name": "河流的女儿",
+                "pool_type": "special",
+                "up6_id": "chr_0027_tangtang"
+            },
+            {
+                "pool_gacha_type": "weapon",
+                "pool_id": "weponbox_1_1_1",
+                "pool_name": "新芽申领",
+                "pool_type": "special",
+                "up6_id": "wpn_pistol_0011"
+            }
         ]);
 
         let json_string = serde_json::to_string_pretty(&default_data).map_err(|e| e.to_string())?;
