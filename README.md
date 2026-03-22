@@ -10,9 +10,7 @@
   </p>
 
   <p>
-    <a href="https://github.com/bhaoo/endfield-gacha/releases">
-      <img src="https://img.shields.io/github/v/release/bhaoo/endfield-gacha?style=flat-square&label=Release&color=%23383838&labelColor=%23fffa00" />
-    </a>
+    <img src="https://img.shields.io/github/v/release/bhaoo/endfield-gacha?style=flat-square&label=Release&color=%23383838&labelColor=%23fffa00" />
     <img src="https://img.shields.io/github/downloads/bhaoo/endfield-gacha/total?style=flat-square&label=Downloads&color=%23383838&labelColor=%23fffa00" />
     <img src="https://img.shields.io/github/last-commit/bhaoo/endfield-gacha/master?style=flat-square&color=%23383838&labelColor=%23fffa00" />
     <img src="https://img.shields.io/github/license/bhaoo/endfield-gacha?style=flat-square&color=%23383838&labelColor=%23fffa00" />
@@ -30,7 +28,13 @@
 
 ### 同步方式
 
-- **日志同步（仅 Windows）**：选择 `system(国服)` 或 `system(国际服)` ，从对应的客户端 WebView 日志抓取链接得到 `token`，再解析出 `uid/roleId`，将数据同步到对应的账号中。
+>[!NOTE]
+>
+> 目前终末地更新至 1.1 版本后客户端 WebView 日志不再出现抽卡相关 URL，`日志同步` 功能目前不可用。
+>
+> 之前使用 `日志同步` 的可以通过 `添加账号` 方式添加账号后可继续使用，本地用户数据依旧在，不会清空~
+
+- ~**日志同步（仅 Windows）**~：选择 `system(国服)` 或 `system(国际服)` ，从对应的客户端 WebView 日志抓取链接得到 `token`，再解析出 `uid/roleId`，将数据同步到对应的账号中。
 - **添加账号同步（推荐）**：应用内打开网页登录并自动抓取 Token，或手动粘贴 Token。
 
 ### 同步与数据
@@ -39,13 +43,25 @@
 - **全量同步**: 拉取所有分页的数据，用于补充历史遗漏数据。
 - **增量追加**：按 `seqId` 去重合并，重复同步不会重复写入，只会追加缺失记录。
 - **角色池 / 武器池**：支持角色池与武器池寻访记录同步与统计展示。
+- **同步进度可视化**：同步过程中会显示当前卡池名称与分页进度，便于判断同步状态。
 - **数据本地保存**：所有数据均保存到本地 `userData/` 下（不同系统路径不同；不上传任何第三方服务器）。
   - 配置文件：`userData/config.json`
+  - 卡池信息：`userData/gachaData/poolInfo.json`
   - 寻访记录数据：`userData/gachaData/*.json`
 
 ### UI 与体验
 
-- **统计图表**：包含池子分布饼图、6★历史记录、当期垫抽等信息。
+- **角色池 / 武器池分页面统计**：支持顶部一键切换角色池与武器池视图。
+- **角色池统计**：
+  - 多个特许池时可切换“全部”聚合视图
+  - 显示当前垫抽、大保底进度、6★ 历史记录
+  - 历史记录中支持 `NEW` 标记与“歪”标记
+- **武器池统计**：
+  - 支持“所有武器池 / 限定武器池 / 非限定武器池”拆分查看
+  - 显示当前垫抽与当期 UP 获取状态
+  - 支持多池切换与“全部”聚合视图
+- **稀有度分布图表**：通过饼图展示 6★ / 5★ / 4★ 分布占比。
+- **历史出货统计**：展示各稀有度数量、占比、平均出货抽数与 6★ 历史记录。
 - **主题切换**：支持 `跟随系统 / 亮色模式 / 暗色模式`。
 
 ### 技术栈
@@ -69,7 +85,7 @@
 
 1. 前往 [Releases](https://github.com/bhaoo/endfield-gacha/releases) 页面。
 2. 下载最新版本中与你系统对应的安装包（Windows / macOS / Linux）。
-   - Windows 可以直接下载便携版（Endfield_Gacha_Portable.exe）
+   - Windows 可以直接下载便携版（Endfield.Gacha_Portable.exe）
    - Linux 推荐通过 `deb` 方式安装（通过 `AppImage` 安装可能因为 GLib 版本问题导致打开白屏）
 4. 运行即可（Windows 请确保应用所在目录具备写入权限，以便创建/写入 `userData/`）。
 
@@ -81,7 +97,7 @@
 
 ## 使用说明
 
-### 日志同步（仅限 Windows 操作系统）
+### ~日志同步（仅限 Windows 操作系统）~
 
 macOS、Linux 操作系统请使用下方的「添加账号同步」方式登录后同步。
 
@@ -102,6 +118,13 @@ macOS、Linux 操作系统请使用下方的「添加账号同步」方式登录
 > Bilibili 渠道服 ⚠ 注意
 >
 > 使用 `添加账号同步` 前，请先前往鹰角网络用户中心 [角色绑定](https://user.hypergryph.com/bindCharacters?game=endfield) 处绑定 Bilibili 服帐号哦~
+
+### 同步数据
+
+1. 先在顶部选择需要查看的角色账号。
+2. 点击 **同步最新数据**，执行增量同步。
+3. 如果怀疑历史数据缺失，点击 **全量同步** 重新拉取当前卡池全部记录。
+4. 同步完成后，可在角色池 / 武器池页面切换查看统计结果。
 
 ## 注意事项
 
