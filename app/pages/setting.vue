@@ -64,6 +64,39 @@
     <UCard>
       <template #header>
         <div class="flex items-center gap-2">
+          <UIcon name="i-lucide-file-spreadsheet" class="text-gray-500" />
+          <span class="font-semibold">数据导出</span>
+        </div>
+      </template>
+
+      <div class="space-y-4">
+        <p class="text-sm text-gray-600 dark:text-gray-300">
+          <template v-if="canExport">
+            将导出当前账号
+            <span class="font-semibold text-gray-900 dark:text-white">{{ exportUserLabel }}</span>
+            的角色记录与武器记录到系统下载目录，时间统一使用 24 小时制。
+          </template>
+          <template v-else>
+            请先返回首页选择一个账号，再执行导出。
+          </template>
+        </p>
+
+        <div class="flex items-center justify-between gap-4 flex-wrap">
+          <span class="text-xs text-gray-500 dark:text-gray-400">
+            导出字段：时间、名称、星级、卡池名、卡池 ID、是否 NEW、是否为加急招募、seqId
+          </span>
+
+          <UButton icon="i-lucide-download" color="primary" :loading="isExporting" :disabled="!canExport || isExporting"
+            @click="onExportExcel">
+            导出 Excel
+          </UButton>
+        </div>
+      </div>
+    </UCard>
+
+    <UCard>
+      <template #header>
+        <div class="flex items-center gap-2">
           <UIcon name="i-lucide-info" class="text-gray-500" />
           <span class="font-semibold">更多信息</span>
         </div>
@@ -110,6 +143,7 @@ const appVersion = ref<string>((pkg as any)?.version || "0.0.0");
 const toast = useToast();
 const { updateState, latestVersion, latestReleaseUrl, updateError, checkForUpdate, updateAvailable } = useUpdate();
 const { setUpdateSeenVersion } = useUserStore();
+const { canExport, currentUserLabel: exportUserLabel, isExporting, exportCurrentUserExcel } = useExcelExport();
 
 onMounted(async () => {
   try {
@@ -145,6 +179,23 @@ const onCheckUpdate = async () => {
     toast.add({ title: "发现新版本", description: `最新版本 ${latestVersion.value}` });
   } else if (updateState.value === "uptodate") {
     toast.add({ title: "已经是最新版本", description: `当前版本 ${appVersion.value}` });
+  }
+};
+
+const onExportExcel = async () => {
+  try {
+    const result = await exportCurrentUserExcel();
+    toast.add({
+      title: "导出成功",
+      description: `${result.fileName} 已保存到下载目录。角色 ${result.charCount} 条，武器 ${result.weaponCount} 条。`,
+      color: "success",
+    });
+  } catch (error: any) {
+    toast.add({
+      title: "导出失败",
+      description: error?.message || "导出 Excel 失败",
+      color: "error",
+    });
   }
 };
 
