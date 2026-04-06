@@ -1338,10 +1338,16 @@ pub async fn webdav_sync_account(user_key: Option<String>) -> Result<WebDavSyncR
         match parse_bundle_text(text) {
             Ok(bundle) => Some(bundle),
             Err(error) => {
-                let remote_value = json!({
-                    "parseError": error,
-                    "rawText": text,
-                });
+                let remote_value = match serde_json::from_str::<Value>(text) {
+                    Ok(raw) => json!({
+                        "parseError": error,
+                        "raw": raw,
+                    }),
+                    Err(_) => json!({
+                        "parseError": error,
+                        "rawText": text,
+                    }),
+                };
                 let _ = save_conflict_snapshots(
                     &target_key,
                     &bundle_to_value(&local_bundle),
