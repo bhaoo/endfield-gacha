@@ -192,6 +192,17 @@ const loadAllData = async (uidToLoad: string) => {
   }
 }
 
+const onWebDavLocalChanged = async (event: Event) => {
+  const detail = (event as CustomEvent<{ accountKeys?: string[] }>).detail
+  const changedKeys = Array.isArray(detail?.accountKeys) ? detail.accountKeys : []
+  if (!uid.value || uid.value === 'none' || changedKeys.length <= 0) return
+  if (!changedKeys.includes(uid.value)) return
+
+  charRecords.value = {}
+  weaponRecords.value = {}
+  await loadAllData(uid.value)
+}
+
 watch(uid, async (newUid) => {
   if (newUid && newUid !== 'none') {
     charRecords.value = {};
@@ -205,6 +216,7 @@ watch(uid, async (newUid) => {
 });
 
 onMounted(async () => {
+  window.addEventListener('webdav-local-changed', onWebDavLocalChanged as EventListener)
   await detectPlatform();
   await loadConfig();
 
@@ -221,6 +233,10 @@ onMounted(async () => {
 
   checkForUpdate().catch(console.error);
 });
+
+onBeforeUnmount(() => {
+  window.removeEventListener('webdav-local-changed', onWebDavLocalChanged as EventListener)
+})
 
 const onSyncClick = () => {
   syncMode.value = 'latest'

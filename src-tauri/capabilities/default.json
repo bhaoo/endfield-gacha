@@ -8,6 +8,7 @@
   "permissions": [
     "core:default",
     "fs:default",
+    "fs:allow-download-write",
     {
       "identifier": "fs:allow-exists",
       "allow": [

@@ -42,6 +42,7 @@ import type { LoginProvider } from '~/composables/useLogin';
 import type { UserBindingsResponse, UserRole } from '~/types/gacha';
 
 const { addUser } = useUserStore();
+const { scheduleAutoSync } = useWebDav();
 
 const currentUid = useState<string>('current-uid');
 
@@ -165,6 +166,11 @@ const processSave = async (loginToken: string) => {
       toast.add({ title: "添加成功", description: `已添加 ${okCount} 个角色` });
       const first = usersToAdd[0];
       currentUid.value = (first?.key || first?.uid) as string;
+      for (const user of usersToAdd) {
+        const key = String(user.key || user.uid || "").trim();
+        if (!key) continue;
+        scheduleAutoSync(key, "账号元数据已更新");
+      }
       isOpen.value = false;
       token.value = '';
       emit('success');

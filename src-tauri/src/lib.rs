@@ -6,12 +6,14 @@ use std::{thread, time::Duration};
 use tauri::command;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
+mod webdav;
+
 #[cfg(target_os = "linux")]
 const APP_IDENTIFIER: &str = "com.bhao.endfieldgacha";
 
 static USERDATA_DIR: OnceLock<PathBuf> = OnceLock::new();
 
-fn get_userdata_dir() -> Result<PathBuf, String> {
+pub(crate) fn get_userdata_dir() -> Result<PathBuf, String> {
     if let Some(dir) = USERDATA_DIR.get() {
         return Ok(dir.clone());
     }
@@ -72,12 +74,12 @@ fn init_userdata_dir(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-fn get_config_path() -> Result<PathBuf, String> {
+pub(crate) fn get_config_path() -> Result<PathBuf, String> {
     let root = get_userdata_dir()?;
     Ok(root.join("config.json"))
 }
 
-fn get_record_path(uid: &str) -> Result<PathBuf, String> {
+pub(crate) fn get_record_path(uid: &str) -> Result<PathBuf, String> {
     let root = get_userdata_dir()?;
     let gacha_dir = root.join("gachaData");
 
@@ -603,6 +605,20 @@ fn read_pool_info() -> Result<serde_json::Value, String> {
                 "pool_name": "新芽申领",
                 "pool_type": "special",
                 "up6_id": "wpn_pistol_0011"
+            },
+            {
+                "pool_gacha_type": "char",
+                "pool_id": "special_1_1_2",
+                "pool_name": "狼珀",
+                "pool_type": "special",
+                "up6_id": "chr_0028_wulfa"
+            },
+            {
+                "pool_gacha_type": "weapon",
+                "pool_id": "weponbox_1_1_2",
+                "pool_name": "绯珀申领",
+                "pool_type": "special",
+                "up6_id": "wpn_sword_0022"
             }
         ]);
 
@@ -657,7 +673,11 @@ pub fn run() {
             read_pool_info,
             save_pool_info,
             get_os,
-            open_login_window
+            open_login_window,
+            webdav::webdav_test_connection,
+            webdav::webdav_sync_account,
+            webdav::webdav_list_restore_accounts,
+            webdav::webdav_restore_accounts
         ])
         .setup(|app| {
             #[cfg(any(target_os = "linux", target_os = "macos"))]

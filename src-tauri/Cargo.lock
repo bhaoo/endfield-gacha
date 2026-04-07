@@ -4,11 +4,14 @@ version = 3
 
 [[package]]
 name = "Endfield_Gacha"
-version = "0.5.3"
+version = "0.6.0"
 dependencies = [
+ "chrono",
  "log",
+ "reqwest",
  "serde",
  "serde_json",
+ "sha2",
  "tauri",
  "tauri-build",
  "tauri-plugin-fs",

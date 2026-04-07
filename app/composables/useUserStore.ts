@@ -1,8 +1,17 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AppConfig, User } from "~/types/gacha";
+import type { AppConfig, User, WebDavConfig, WebDavStateItem } from "~/types/gacha";
 import {
   isSystemUid,
 } from "~/utils/systemAccount";
+
+const createDefaultWebDavConfig = (): WebDavConfig => ({
+  baseUrl: "",
+  username: "",
+  password: "",
+  basePath: "/endfield-gacha",
+  autoSync: false,
+  silentAutoSync: true,
+});
 
 export const useUserStore = () => {
   const userList = useState<User[]>("global-user-list", () => []);
@@ -10,6 +19,8 @@ export const useUserStore = () => {
   const updateSeenVersion = useState<string>("global-update-seen-version", () => "");
   const currentUser = useState<string>("current-uid", () => "none");
   const savabled = useState<boolean>("global-savabled", () => false);
+  const webdavConfig = useState<WebDavConfig>("global-webdav-config", createDefaultWebDavConfig);
+  const webdavState = useState<Record<string, WebDavStateItem>>("global-webdav-state", () => ({}));
 
   const getUserKey = (u: User) =>
     u.key || (u.roleId?.roleId ? `${u.uid}_${u.roleId.roleId}` : u.uid);
@@ -76,11 +87,18 @@ export const useUserStore = () => {
       colorMode.preference = savedTheme;
 
       updateSeenVersion.value = config.updateSeenVersion || "";
+      webdavConfig.value = {
+        ...createDefaultWebDavConfig(),
+        ...(config.webdav || {}),
+      };
+      webdavState.value = config.webdavState || {};
     } catch (e) {
       console.error("加载配置失败", e);
       userList.value = [];
       currentTheme.value = "system";
       updateSeenVersion.value = "";
+      webdavConfig.value = createDefaultWebDavConfig();
+      webdavState.value = {};
     } finally {
       savabled.value = true;
     }
@@ -97,6 +115,11 @@ export const useUserStore = () => {
         currentUser: currentUser.value,
         theme: currentTheme.value,
         updateSeenVersion: updateSeenVersion.value || "",
+        webdav: {
+          ...createDefaultWebDavConfig(),
+          ...(toRaw(webdavConfig.value) || {}),
+        },
+        webdavState: toRaw(webdavState.value) || {},
       };
       await invoke("save_config", { data: configData });
       console.log("配置已同步到硬盘");
@@ -154,5 +177,9 @@ export const useUserStore = () => {
     setUpdateSeenVersion,
     currentTheme,
     setTheme,
+    saveConfig,
+    webdavConfig,
+    webdavState,
+    getUserKey,
   };
 };

@@ -16,6 +16,7 @@ export const useGachaSync = () => {
   const isSyncing = ref(false);
   const { isWindows, detect: detectPlatform } = usePlatform();
   const { addUser } = useUserStore();
+  const { scheduleAutoSync } = useWebDav();
 
   type SyncProgress = {
     type: "char" | "weapon" | null;
@@ -134,6 +135,13 @@ export const useGachaSync = () => {
     if (!isSystemUid(uid)) {
       const config = await invoke<AppConfig>("read_config");
       const existing = findConfigUserByKey(config, uid);
+      if (existing?.source === "remote" && !existing.token) {
+        showToast(
+          `${actionLabel}失败`,
+          "该账号来自 WebDAV 恢复，未保存登录状态。请重新登录后再同步最新数据。",
+        );
+        return;
+      }
       if (existing && (!existing.token || existing.source === "log")) {
         const provider =
           existing.provider === "gryphline" ? "gryphline" : "hypergryph";
@@ -287,6 +295,7 @@ export const useGachaSync = () => {
       if (syncResult.status === "success") {
         if (syncResult.count > 0) {
           showToast(`${actionLabel}成功`, `新增 ${syncResult.count} 条寻访记录！`);
+          scheduleAutoSync(effectiveUid, "抽卡记录已保存");
         } else {
           showToast(
             `${actionLabel}成功`,
@@ -300,6 +309,9 @@ export const useGachaSync = () => {
           syncResult.count > 0
             ? `新增 ${syncResult.count} 条记录，但存在部分分页获取失败。`
             : "未获取到新增记录哦，且存在部分分页获取失败。";
+        if (syncResult.count > 0) {
+          scheduleAutoSync(effectiveUid, "抽卡记录已保存");
+        }
         showToast(
           `${actionLabel}部分失败`,
           [baseMsg, failedPoolsText, reasonText].filter(Boolean).join(" "),
@@ -309,6 +321,9 @@ export const useGachaSync = () => {
           syncResult.count > 0
             ? `新增 ${syncResult.count} 条记录，但所有池都未完整成功。`
             : "所有分页在重试 3 次后仍获取失败。";
+        if (syncResult.count > 0) {
+          scheduleAutoSync(effectiveUid, "抽卡记录已保存");
+        }
         showToast(
           `${actionLabel}全部失败`,
           [failMsg, failedPoolsText, reasonText].filter(Boolean).join(" "),

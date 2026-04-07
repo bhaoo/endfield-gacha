@@ -1,6 +1,6 @@
 [package]
 name = "Endfield_Gacha"
-version = "0.5.3"
+version = "0.6.0"
 description = "A tool for tracking statistics and analyzing recruitment (gacha) records in Arknights: Endfield."
 authors = ["Bhao"]
 license = "MIT"
@@ -20,7 +20,10 @@ tauri-build = { version = "2.5.3", features = [] }
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde"] }
 log = "0.4"
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
+sha2 = "0.10"
 tauri = { version = "2.9.5", features = [] }
 tauri-plugin-log = "2"
 tauri-plugin-fs = "2"

@@ -4,7 +4,7 @@ export interface User {
   token: string;
   provider?: 'hypergryph' | 'gryphline';
   roleId?: UserRole;
-  source?: 'login' | 'log';
+  source?: 'login' | 'log' | 'remote';
 }
 
 export interface UserRole {
@@ -19,6 +19,56 @@ export interface AppConfig {
   currentUser?: string;
   theme?: 'system' | 'light' | 'dark';
   updateSeenVersion?: string;
+  webdav?: WebDavConfig;
+  webdavState?: Record<string, WebDavStateItem>;
+}
+
+export interface WebDavConfig {
+  baseUrl: string;
+  username: string;
+  password: string;
+  basePath: string;
+  autoSync: boolean;
+  silentAutoSync: boolean;
+}
+
+export interface WebDavStateItem {
+  lastLocalHash: string;
+  lastRemoteHash: string;
+  lastSyncAt: string;
+}
+
+export interface WebDavSyncResult {
+  accountKey: string;
+  status: 'noop' | 'uploaded' | 'downloaded' | 'merged';
+  message: string;
+  warning?: string;
+  localChanged: boolean;
+  manifestUpdated: boolean;
+  updatedAt: string;
+}
+
+export interface WebDavRestoreAccount {
+  key: string;
+  provider: 'hypergryph' | 'gryphline';
+  uid: string;
+  roleId: UserRole;
+  updatedAt: string;
+}
+
+export interface WebDavRestoreResult {
+  restored: string[];
+  currentUser?: string;
+}
+
+export interface WebDavBatchSyncResult {
+  total: number;
+  skipped: number;
+  failed: Array<{
+    accountKey: string;
+    message: string;
+  }>;
+  results: WebDavSyncResult[];
 }
 
 export interface HgApiResponse<T = any> {
