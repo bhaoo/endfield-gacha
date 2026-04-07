@@ -462,6 +462,15 @@ fn bundle_to_remote_value(bundle: &AccountBundle) -> Value {
     })
 }
 
+fn bundle_to_hash_value(bundle: &AccountBundle) -> Value {
+    json!({
+        "schema_version": bundle.schema_version,
+        "account": bundle.account.clone(),
+        "character": bundle.character.clone(),
+        "weapon": bundle.weapon.clone(),
+    })
+}
+
 fn bundle_has_records(bundle: &AccountBundle) -> bool {
     let has_character = bundle
         .character
@@ -531,7 +540,7 @@ fn write_stable_json(value: &Value, output: &mut String) -> Result<(), String> {
 }
 
 fn bundle_hash(bundle: &AccountBundle) -> Result<String, String> {
-    let value = bundle_to_remote_value(bundle);
+    let value = bundle_to_hash_value(bundle);
     let mut stable = String::new();
     write_stable_json(&value, &mut stable)?;
     let mut hasher = Sha256::new();
