@@ -2,6 +2,7 @@ import type { EndFieldCharInfo, GachaStatistics, HistoryRecord, EndFieldWeaponIn
 
 export const POOL_TYPES = [
   "E_CharacterGachaPoolType_Special",
+  "E_CharacterGachaPoolType_Joint",
   "E_CharacterGachaPoolType_Standard",
   "E_CharacterGachaPoolType_Beginner",
 ] as const;
@@ -11,6 +12,7 @@ const SPECIAL_BIG_PITY_MAX = 120;
 
 export const POOL_NAME_MAP: Record<string, string> = {
   "E_CharacterGachaPoolType_Special": "特许寻访",
+  "E_CharacterGachaPoolType_Joint": "辉光庆典",
   "E_CharacterGachaPoolType_Standard": "基础寻访",
   "E_CharacterGachaPoolType_Beginner": "启程寻访"
 };
