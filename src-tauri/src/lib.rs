@@ -101,6 +101,115 @@ fn get_pool_info_path() -> Result<PathBuf, String> {
     Ok(gacha_dir.join("poolInfo.json"))
 }
 
+fn default_pool_info() -> serde_json::Value {
+    serde_json::json!([
+        {
+            "pool_gacha_type": "char",
+            "pool_id": "special_1_0_1",
+            "pool_name": "熔火灼痕",
+            "pool_type": "special",
+            "up6_id": "chr_0016_laevat"
+        },
+        {
+            "pool_gacha_type": "char",
+            "pool_id": "special_1_0_3",
+            "pool_name": "轻飘飘的信使",
+            "pool_type": "special",
+            "up6_id": "chr_0013_aglina"
+        },
+        {
+            "pool_gacha_type": "char",
+            "pool_id": "special_1_0_2",
+            "pool_name": "热烈色彩",
+            "pool_type": "special",
+            "up6_id": "chr_0017_yvonne"
+        },
+        {
+            "pool_gacha_type": "weapon",
+            "pool_id": "weponbox_1_0_3",
+            "pool_name": "迅行申领",
+            "pool_type": "special",
+            "up6_id": "wpn_funnel_0011"
+        },
+        {
+            "pool_gacha_type": "weapon",
+            "pool_id": "weponbox_1_0_2",
+            "pool_name": "绘涂申领",
+            "pool_type": "special",
+            "up6_id": "wpn_pistol_0010"
+        },
+        {
+            "pool_gacha_type": "weapon",
+            "pool_id": "weponbox_1_0_1",
+            "pool_name": "熔铸申领",
+            "pool_type": "special",
+            "up6_id": "wpn_sword_0006"
+        },
+        {
+            "pool_gacha_type": "weapon",
+            "pool_id": "weaponbox_constant_2",
+            "pool_name": "星声申领",
+            "pool_type": "constant",
+            "up6_id": "wpn_funnel_0013"
+        },
+        {
+            "pool_gacha_type": "char",
+            "pool_id": "special_1_1_1",
+            "pool_name": "河流的女儿",
+            "pool_type": "special",
+            "up6_id": "chr_0027_tangtang"
+        },
+        {
+            "pool_gacha_type": "weapon",
+            "pool_id": "weponbox_1_1_1",
+            "pool_name": "新芽申领",
+            "pool_type": "special",
+            "up6_id": "wpn_pistol_0011"
+        },
+        {
+            "pool_gacha_type": "char",
+            "pool_id": "special_1_1_2",
+            "pool_name": "狼珀",
+            "pool_type": "special",
+            "up6_id": "chr_0028_wulfa"
+        },
+        {
+            "pool_gacha_type": "weapon",
+            "pool_id": "weponbox_1_1_2",
+            "pool_name": "绯珀申领",
+            "pool_type": "special",
+            "up6_id": "wpn_sword_0022"
+        },
+        {
+            "pool_gacha_type": "char",
+            "pool_id": "special_1_2_1",
+            "pool_name": "春雷动，万物生",
+            "pool_type": "special",
+            "up6_id": "chr_0030_zhuangfy"
+        },
+        {
+            "pool_gacha_type": "weapon",
+            "pool_id": "weponbox_1_2_1",
+            "pool_name": "行舟申领",
+            "pool_type": "special",
+            "up6_id": "wpn_funnel_0015"
+        },
+        {
+            "pool_gacha_type": "char",
+            "pool_id": "joint_1_2_2",
+            "pool_name": "辉光庆典",
+            "pool_type": "extra",
+            "up6_id": "",
+            "up6_ids": [
+                "chr_0016_laevat",
+                "chr_0013_aglina",
+                "chr_0025_ardelia",
+                "chr_0029_pograni"
+            ]
+        }
+    ])
+}
+
 fn load_full_record(uid: &str) -> Result<serde_json::Value, String> {
     let file_path = get_record_path(uid)?;
 
@@ -538,117 +647,69 @@ fn read_weapon_records(uid: String) -> Result<serde_json::Value, String> {
 }
 
 #[command]
+fn ensure_pool_info_defaults() -> Result<String, String> {
+    let file_path = get_pool_info_path()?;
+    let default_data = default_pool_info();
+
+    if !file_path.exists() {
+        let json_string = serde_json::to_string_pretty(&default_data).map_err(|e| e.to_string())?;
+        fs::write(&file_path, json_string).map_err(|e| e.to_string())?;
+        return Ok("created".into());
+    }
+
+    let content = fs::read_to_string(&file_path).map_err(|e| e.to_string())?;
+    let mut local_data: serde_json::Value = match serde_json::from_str(&content) {
+        Ok(data) => data,
+        Err(_) => return Ok("skipped_invalid".into()),
+    };
+    let Some(local_array) = local_data.as_array_mut() else {
+        return Ok("skipped_invalid".into());
+    };
+
+    let mut existing_pool_ids = std::collections::HashSet::new();
+    for item in local_array.iter() {
+        if let Some(pool_id) = item
+            .get("pool_id")
+            .and_then(|value| value.as_str())
+            .filter(|value| !value.is_empty())
+        {
+            existing_pool_ids.insert(pool_id.to_string());
+        }
+    }
+
+    let mut added_count = 0;
+    if let Some(default_array) = default_data.as_array() {
+        for item in default_array {
+            let Some(pool_id) = item
+                .get("pool_id")
+                .and_then(|value| value.as_str())
+                .filter(|value| !value.is_empty())
+            else {
+                continue;
+            };
+
+            if existing_pool_ids.insert(pool_id.to_string()) {
+                local_array.push(item.clone());
+                added_count += 1;
+            }
+        }
+    }
+
+    if added_count <= 0 {
+        return Ok("unchanged".into());
+    }
+
+    let json_string = serde_json::to_string_pretty(&local_data).map_err(|e| e.to_string())?;
+    fs::write(&file_path, json_string).map_err(|e| e.to_string())?;
+    Ok(format!("added:{added_count}"))
+}
+
+#[command]
 fn read_pool_info() -> Result<serde_json::Value, String> {
     let file_path = get_pool_info_path()?;
 
     if !file_path.exists() {
-        let default_data = serde_json::json!([
-            {
-                "pool_gacha_type": "char",
-                "pool_id": "special_1_0_1",
-                "pool_name": "熔火灼痕",
-                "pool_type": "special",
-                "up6_id": "chr_0016_laevat"
-            },
-            {
-                "pool_gacha_type": "char",
-                "pool_id": "special_1_0_3",
-                "pool_name": "轻飘飘的信使",
-                "pool_type": "special",
-                "up6_id": "chr_0013_aglina"
-            },
-            {
-                "pool_gacha_type": "char",
-                "pool_id": "special_1_0_2",
-                "pool_name": "热烈色彩",
-                "pool_type": "special",
-                "up6_id": "chr_0017_yvonne"
-            },
-            {
-                "pool_gacha_type": "weapon",
-                "pool_id": "weponbox_1_0_3",
-                "pool_name": "迅行申领",
-                "pool_type": "special",
-                "up6_id": "wpn_funnel_0011"
-            },
-            {
-                "pool_gacha_type": "weapon",
-                "pool_id": "weponbox_1_0_2",
-                "pool_name": "绘涂申领",
-                "pool_type": "special",
-                "up6_id": "wpn_pistol_0010"
-            },
-            {
-                "pool_gacha_type": "weapon",
-                "pool_id": "weponbox_1_0_1",
-                "pool_name": "熔铸申领",
-                "pool_type": "special",
-                "up6_id": "wpn_sword_0006"
-            },
-            {
-                "pool_gacha_type": "weapon",
-                "pool_id": "weaponbox_constant_2",
-                "pool_name": "星声申领",
-                "pool_type": "constant",
-                "up6_id": "wpn_funnel_0013"
-            },
-            {
-                "pool_gacha_type": "char",
-                "pool_id": "special_1_1_1",
-                "pool_name": "河流的女儿",
-                "pool_type": "special",
-                "up6_id": "chr_0027_tangtang"
-            },
-            {
-                "pool_gacha_type": "weapon",
-                "pool_id": "weponbox_1_1_1",
-                "pool_name": "新芽申领",
-                "pool_type": "special",
-                "up6_id": "wpn_pistol_0011"
-            },
-            {
-                "pool_gacha_type": "char",
-                "pool_id": "special_1_1_2",
-                "pool_name": "狼珀",
-                "pool_type": "special",
-                "up6_id": "chr_0028_wulfa"
-            },
-            {
-                "pool_gacha_type": "weapon",
-                "pool_id": "weponbox_1_1_2",
-                "pool_name": "绯珀申领",
-                "pool_type": "special",
-                "up6_id": "wpn_sword_0022"
-            },
-            {
-                "pool_gacha_type": "char",
-                "pool_id": "special_1_2_1",
-                "pool_name": "春雷动，万物生",
-                "pool_type": "special",
-                "up6_id": "chr_0030_zhuangfy"
-            },
-            {
-                "pool_gacha_type": "weapon",
-                "pool_id": "weponbox_1_2_1",
-                "pool_name": "行舟申领",
-                "pool_type": "special",
-                "up6_id": "wpn_funnel_0015"
-            },
-            {
-                "pool_gacha_type": "char",
-                "pool_id": "joint_1_2_2",
-                "pool_name": "辉光庆典",
-                "pool_type": "extra",
-                "up6_id": "",
-                "up6_ids": [
-                    "chr_0016_laevat",
-                    "chr_0013_aglina",
-                    "chr_0025_ardelia",
-                    "chr_0029_pograni"
-                ]
-            }
-        ]);
-
+        let default_data = default_pool_info();
         let json_string = serde_json::to_string_pretty(&default_data).map_err(|e| e.to_string())?;
         fs::write(&file_path, json_string).map_err(|e| e.to_string())?;
         return Ok(default_data);
@@ -697,6 +758,7 @@ pub fn run() {
             save_weapon_records,
             read_weapon_records,
             read_weapon_max_seqid,
+            ensure_pool_info_defaults,
             read_pool_info,
             save_pool_info,
             get_os,
