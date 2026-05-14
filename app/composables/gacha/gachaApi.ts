@@ -5,7 +5,7 @@ import {
   delay,
   POOL_TYPES,
   POOL_NAME_MAP,
-  SPECIAL_POOL_KEY,
+  POOL_INFO_CHAR_POOL_KEYS,
 } from "~/utils/gachaCalc";
 
 export const createGachaApi = (deps: {
@@ -211,9 +211,12 @@ export const createGachaApi = (deps: {
       if (hasMore) await delay(500, 1000);
     }
 
-    const isSpecialCharPool =
-      progress?.type === "char" && extraParams?.pool_type === SPECIAL_POOL_KEY;
-    if (isSpecialCharPool && allData.length > 0) {
+    const shouldFetchCharPoolInfo =
+      progress?.type === "char" &&
+      (POOL_INFO_CHAR_POOL_KEYS as readonly string[]).includes(
+        String(extraParams?.pool_type || ""),
+      );
+    if (shouldFetchCharPoolInfo && allData.length > 0) {
       const poolIds = Array.from(
         new Set(
           (allData as any[])
@@ -231,7 +234,7 @@ export const createGachaApi = (deps: {
       } catch (error: any) {
         const msg = String(error?.message || "获取角色池信息失败");
         console.error(
-          `Fetch special char pool info failed for ${JSON.stringify(extraParams)}:`,
+          `Fetch char pool info failed for ${JSON.stringify(extraParams)}:`,
           error,
         );
         failed = true;

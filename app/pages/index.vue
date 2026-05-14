@@ -143,16 +143,26 @@
 
           <div v-if="stat.history6.length > 0" class="flex flex-wrap gap-2">
             <div v-for="(rec, idx) in [...stat.history6].reverse()" :key="idx"
-              class="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 flex items-center gap-1">
+              class="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 flex items-center gap-1 relative">
               <span class="font-medium text-gray-700 dark:text-gray-200">
                 {{ rec.name }}
               </span>
 
-              <span class="text-gray-400">[{{ rec.pity }}]</span>
+              <span class="text-gray-400">[{{ rec.isFree ? '加急招募' : rec.pity }}]</span>
 
               <span v-if="rec.isNew" class="text-red-500 font-bold ml-0.5 text-[10px]">
                 [NEW]
               </span>
+
+              <svg width="20" height="20" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg"
+                v-if="isJointPoolStat(stat) && rec.up6Id && rec.isUp === false"
+                class="absolute -top-2 -right-2 select-none">
+                <circle cx="150" cy="150" r="140" fill="oklch(55.1% 0.027 264.364)" />
+                <text x="50%" y="50%" transform="rotate(15, 150, 150)"
+                  font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif"
+                  font-weight="bold" font-size="180" text-anchor="middle" dominant-baseline="central"
+                  fill="white">歪</text>
+              </svg>
             </div>
           </div>
 
@@ -188,6 +198,7 @@ const isSystem = computed(() => isSystemUid(uid.value))
 const systemLabel = computed(() => systemUidLabel(uid.value || SYSTEM_UID_CN))
 
 const SPECIAL_POOL_TYPE = 'E_CharacterGachaPoolType_Special'
+const JOINT_POOL_TYPE = 'E_CharacterGachaPoolType_Joint'
 const ALL_SPECIAL_VALUE = '__all__'
 
 const specialStats = computed(() =>
@@ -197,6 +208,8 @@ const specialStats = computed(() =>
 const otherStats = computed(() =>
   (statistics.value || []).filter((s) => s.poolType !== SPECIAL_POOL_TYPE),
 )
+
+const isJointPoolStat = (stat: GachaStatistics) => stat.poolType === JOINT_POOL_TYPE
 
 const specialPoolOptions = computed(() =>
   [
