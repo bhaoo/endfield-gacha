@@ -88,6 +88,7 @@
 </template>
 
 <script lang="ts" setup>
+import { invoke } from '@tauri-apps/api/core';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { isSystemUid } from '~/utils/systemAccount'
 
@@ -217,6 +218,7 @@ watch(uid, async (newUid) => {
 
 onMounted(async () => {
   window.addEventListener('webdav-local-changed', onWebDavLocalChanged as EventListener)
+  await invoke('ensure_pool_info_defaults').catch(console.error)
   await detectPlatform();
   await loadConfig();
 

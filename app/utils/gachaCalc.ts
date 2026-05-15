@@ -2,17 +2,43 @@ import type { EndFieldCharInfo, GachaStatistics, HistoryRecord, EndFieldWeaponIn
 
 export const POOL_TYPES = [
   "E_CharacterGachaPoolType_Special",
+  "E_CharacterGachaPoolType_Joint",
   "E_CharacterGachaPoolType_Standard",
   "E_CharacterGachaPoolType_Beginner",
 ] as const;
 
 export const SPECIAL_POOL_KEY = "E_CharacterGachaPoolType_Special" as const;
+export const JOINT_POOL_KEY = "E_CharacterGachaPoolType_Joint" as const;
+export const POOL_INFO_CHAR_POOL_KEYS = [
+  SPECIAL_POOL_KEY,
+  JOINT_POOL_KEY,
+] as const;
 const SPECIAL_BIG_PITY_MAX = 120;
 
 export const POOL_NAME_MAP: Record<string, string> = {
   "E_CharacterGachaPoolType_Special": "特许寻访",
+  "E_CharacterGachaPoolType_Joint": "辉光庆典",
   "E_CharacterGachaPoolType_Standard": "基础寻访",
   "E_CharacterGachaPoolType_Beginner": "启程寻访"
+};
+
+export const toUp6IdList = (value: unknown): string[] => {
+  const values = Array.isArray(value) ? value : [value];
+  return Array.from(
+    new Set(
+      values
+        .map((it) => String(it || "").trim())
+        .filter(Boolean),
+    ),
+  );
+};
+
+export const getPoolInfoUp6Ids = (info?: {
+  up6_id?: string;
+  up6_ids?: string[];
+}): string[] => {
+  const up6Ids = toUp6IdList(info?.up6_ids);
+  return up6Ids.length > 0 ? up6Ids : toUp6IdList(info?.up6_id);
 };
 
 export const parseGachaParams = (uri: string): EndfieldGachaParams | null => {
@@ -112,7 +138,12 @@ export const analyzeSpecialPoolData = (
     return {
       poolType: SPECIAL_POOL_KEY,
       poolId,
-      poolName: poolName || info?.pool_name || poolId || POOL_NAME_MAP[SPECIAL_POOL_KEY] || SPECIAL_POOL_KEY,
+      poolName:
+        poolName ||
+        info?.pool_name ||
+        poolId ||
+        POOL_NAME_MAP[SPECIAL_POOL_KEY] ||
+        SPECIAL_POOL_KEY,
       isCurrentPool: false,
       totalPulls: 0,
       paidPulls: 0,
@@ -170,6 +201,114 @@ export const analyzeSpecialPoolData = (
 
       if (current.up6Id && item.charId === current.up6Id) current.gotUp6 = true;
       if (!isFree) globalSmallPity = 0;
+    } else if (item.rarity === 5) {
+      current.count5++;
+    } else if (item.rarity === 4) {
+      current.count4++;
+    }
+  }
+
+  finalizeCurrent();
+
+  if (results.length > 0) {
+    results[results.length - 1]!.isCurrentPool = true;
+  }
+
+  return results.reverse();
+};
+
+// 特殊寻访无小保底/大保底
+export const analyzeJointPoolData = (
+  rawData: EndFieldCharInfo[],
+  poolInfoById: Record<
+    string,
+    { pool_name?: string; up6_id?: string; up6_ids?: string[] }
+  > = {},
+): GachaStatistics[] => {
+  const data = [...rawData].reverse();
+
+  const results: GachaStatistics[] = [];
+  let current: GachaStatistics | null = null;
+  let currentPoolId = "";
+  let paidPity = 0;
+
+  const finalizeCurrent = () => {
+    if (!current) return;
+    current.pityCount = paidPity;
+    current.history6.reverse();
+  };
+
+  const startNewPool = (poolId: string, poolName: string): GachaStatistics => {
+    const info = poolInfoById[poolId];
+    const up6Ids = getPoolInfoUp6Ids(info);
+    const up6Id = up6Ids[0] || "";
+    return {
+      poolType: JOINT_POOL_KEY,
+      poolId,
+      poolName:
+        poolName ||
+        info?.pool_name ||
+        poolId ||
+        POOL_NAME_MAP[JOINT_POOL_KEY] ||
+        JOINT_POOL_KEY,
+      isCurrentPool: false,
+      totalPulls: 0,
+      paidPulls: 0,
+      freePulls: 0,
+      pityCount: 0,
+      up6Id: up6Id || undefined,
+      up6Ids: up6Ids.length > 0 ? up6Ids : undefined,
+      gotUp6: false,
+      count6: 0,
+      count5: 0,
+      count4: 0,
+      history6: [] as HistoryRecord[],
+    };
+  };
+
+  for (const item of data) {
+    if (item.poolId !== currentPoolId) {
+      finalizeCurrent();
+      currentPoolId = item.poolId;
+      current = startNewPool(item.poolId, item.poolName);
+      paidPity = 0;
+      results.push(current);
+    }
+
+    if (!current) continue;
+
+    if (item.poolName) current.poolName = item.poolName;
+
+    current.totalPulls++;
+
+    const isFree = !!item.isFree;
+    if (isFree) {
+      current.freePulls = (current.freePulls || 0) + 1;
+    } else {
+      current.paidPulls = (current.paidPulls || 0) + 1;
+      paidPity++;
+    }
+
+    if (item.rarity === 6) {
+      const up6Ids = current.up6Ids || [];
+      const isUp = up6Ids.includes(item.charId);
+      current.count6++;
+      current.history6.push({
+        name: item.charName,
+        pity: isFree ? 0 : paidPity,
+        isNew: item.isNew,
+        isFree,
+        isUp: up6Ids.length > 0 && isUp,
+        poolId: current.poolId,
+        poolName: current.poolName,
+        up6Id: current.up6Id || undefined,
+        up6Ids: up6Ids.length > 0 ? up6Ids : undefined,
+        gachaTs: item.gachaTs,
+        seqId: item.seqId,
+      });
+
+      if (isUp) current.gotUp6 = true;
+      if (!isFree) paidPity = 0;
     } else if (item.rarity === 5) {
       current.count5++;
     } else if (item.rarity === 4) {
