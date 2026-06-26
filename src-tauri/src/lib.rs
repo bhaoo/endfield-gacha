@@ -206,6 +206,34 @@ fn default_pool_info() -> serde_json::Value {
                 "chr_0025_ardelia",
                 "chr_0029_pograni"
             ]
+        },
+        {
+            "pool_gacha_type": "char",
+            "pool_id": "special_1_3_1",
+            "pool_name": "拳出无悔",
+            "pool_type": "special",
+            "up6_id": "chr_0031_mifu"
+        },
+        {
+            "pool_gacha_type": "weapon",
+            "pool_id": "weponbox_1_3_1",
+            "pool_name": "绛结申领",
+            "pool_type": "special",
+            "up6_id": "wpn_claym_0017"
+        },
+        {
+            "pool_gacha_type": "char",
+            "pool_id": "special_1_3_2",
+            "pool_name": "逐罪者",
+            "pool_type": "special",
+            "up6_id": "chr_0033_camille"
+        },
+        {
+            "pool_gacha_type": "weapon",
+            "pool_id": "weponbox_1_3_2",
+            "pool_name": "染赤申领",
+            "pool_type": "special",
+            "up6_id": "wpn_lance_0015"
         }
     ])
 }
