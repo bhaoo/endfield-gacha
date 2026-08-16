@@ -3,7 +3,7 @@
   "type": "module",
   "author": "Bhao",
   "license": "MIT",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "private": true,
   "scripts": {
     "build": "nuxt build",
@@ -22,7 +22,7 @@
     "tailwindcss": "^4.1.18",
     "vue": "^3.5.27",
     "vue-router": "^4.6.4",
-    "xlsx": "^0.18.5"
+    "write-excel-file": "^4.1.1"
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.9.6",

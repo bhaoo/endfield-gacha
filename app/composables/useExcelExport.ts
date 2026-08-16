@@ -1,9 +1,22 @@
 import { BaseDirectory, writeFile } from "@tauri-apps/plugin-fs";
 import { downloadDir, join } from "@tauri-apps/api/path";
+import type { Cell } from "write-excel-file/browser";
 import type { EndFieldCharInfo, EndFieldWeaponInfo, User } from "~/types/gacha";
 
-type ExportCell = string | number;
+type ExportCell = string | number | Cell;
 type ExportRow = ExportCell[];
+
+const RARITY_TEXT_COLOR: Record<number, string> = {
+  6: "#ff8904",
+  5: "#fdc700",
+  4: "#ad46ff",
+};
+
+// NEW 高亮色
+const NEW_TEXT_COLOR = "#d60000";
+
+// 表头颜色
+const HEADER_TEXT_COLOR = "#1f4e79";
 
 const EXPORT_HEADERS = [
   "时间",
@@ -75,14 +88,34 @@ const flattenRecordMap = <T>(recordMap: Record<string, T[]>) =>
 
 const toYesNo = (value?: boolean) => (value ? "是" : "否");
 
+const rarityCell = (rarity: number): ExportCell => {
+  if (!Number.isFinite(rarity)) return "";
+  const textColor = RARITY_TEXT_COLOR[rarity];
+  return textColor ? { value: rarity, textColor } : rarity;
+};
+
+const newCell = (isNew?: boolean): ExportCell => {
+  const value = toYesNo(isNew);
+  return value === "是"
+    ? { value, textColor: NEW_TEXT_COLOR, fontWeight: "bold" }
+    : value;
+};
+
+const headerRow = (): ExportRow =>
+  Array.from(EXPORT_HEADERS).map<ExportCell>((label) => ({
+    value: label,
+    textColor: HEADER_TEXT_COLOR,
+    fontWeight: "bold",
+  }));
+
 const toCharRows = (records: Record<string, EndFieldCharInfo[]>) =>
   sortRecordsDesc(flattenRecordMap(records)).map<ExportRow>((item) => [
     formatDateTime24h(item.gachaTs),
     String(item.charName || ""),
-    Number.isFinite(item.rarity) ? item.rarity : "",
+    rarityCell(item.rarity),
     String(item.poolName || ""),
     String(item.poolId || ""),
-    toYesNo(item.isNew),
+    newCell(item.isNew),
     toYesNo(item.isFree),
     String(item.seqId || ""),
   ]);
@@ -91,15 +124,15 @@ const toWeaponRows = (records: Record<string, EndFieldWeaponInfo[]>) =>
   sortRecordsDesc(flattenRecordMap(records)).map<ExportRow>((item) => [
     formatDateTime24h(item.gachaTs),
     String(item.weaponName || ""),
-    Number.isFinite(item.rarity) ? item.rarity : "",
+    rarityCell(item.rarity),
     String(item.poolName || ""),
     String(item.poolId || ""),
-    toYesNo(item.isNew),
+    newCell(item.isNew),
     "否",
     String(item.seqId || ""),
   ]);
 
-const createSheetRows = (rows: ExportRow[]) => [Array.from(EXPORT_HEADERS), ...rows];
+const createSheetRows = (rows: ExportRow[]) => [headerRow(), ...rows];
 
 const getUserKey = (u: User) =>
   u.key || (u.roleId?.roleId ? `${u.uid}_${u.roleId.roleId}` : u.uid);
@@ -152,10 +185,10 @@ export const useExcelExport = () => {
 
     try {
       const uid = String(currentUser.value).trim();
-      const [charRaw, weaponRaw, XLSX] = await Promise.all([
+      const [charRaw, weaponRaw, { default: writeXlsxFile }] = await Promise.all([
         readUserDataRaw(uid, "char") as Promise<Record<string, EndFieldCharInfo[]>>,
         readUserDataRaw(uid, "weapon") as Promise<Record<string, EndFieldWeaponInfo[]>>,
-        import("xlsx"),
+        import("write-excel-file/browser"),
       ]);
 
       const charRows = toCharRows(charRaw || {});
@@ -165,33 +198,26 @@ export const useExcelExport = () => {
         throw new Error("当前账号暂无可导出的记录");
       }
 
-      const workbook = XLSX.utils.book_new();
-      const charSheet = XLSX.utils.aoa_to_sheet(createSheetRows(charRows));
-      const weaponSheet = XLSX.utils.aoa_to_sheet(createSheetRows(weaponRows));
-
-      const cols = [
-        { wch: 20 },
-        { wch: 24 },
-        { wch: 8 },
-        { wch: 24 },
-        { wch: 20 },
-        { wch: 12 },
-        { wch: 16 },
-        { wch: 24 },
+      const columns = [
+        { width: 20 },
+        { width: 24 },
+        { width: 8 },
+        { width: 24 },
+        { width: 20 },
+        { width: 12 },
+        { width: 16 },
+        { width: 24 },
       ];
-      (charSheet as any)["!cols"] = cols;
-      (weaponSheet as any)["!cols"] = cols;
 
-      XLSX.utils.book_append_sheet(workbook, charSheet, "角色记录");
-      XLSX.utils.book_append_sheet(workbook, weaponSheet, "武器记录");
+      const { toBlob } = writeXlsxFile([
+        { sheet: "角色记录", columns, data: createSheetRows(charRows) },
+        { sheet: "武器记录", columns, data: createSheetRows(weaponRows) },
+      ]);
 
       const label = sanitizeFilenamePart(currentUserLabel.value || uid);
       const fileName = `Endfield_Gacha_${label}_${formatFileStamp(new Date())}.xlsx`;
-      const buffer = XLSX.write(workbook, {
-        bookType: "xlsx",
-        type: "array",
-        compression: true,
-      }) as ArrayBuffer;
+      const blob = await toBlob();
+      const buffer = await blob.arrayBuffer();
 
       await writeFile(fileName, new Uint8Array(buffer), {
         baseDir: BaseDirectory.Download,
