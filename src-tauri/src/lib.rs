@@ -248,6 +248,20 @@ fn default_pool_info() -> serde_json::Value {
             "pool_name": "军列申领",
             "pool_type": "special",
             "up6_id": "wpn_funnel_0016"
+        },
+        {
+            "pool_gacha_type": "char",
+            "pool_id": "special_1_4_2",
+            "pool_name": "晨星于此闪耀",
+            "pool_type": "special",
+            "up6_id": "chr_0035_liino"
+        },
+        {
+            "pool_gacha_type": "weapon",
+            "pool_id": "weponbox_1_4_2",
+            "pool_name": "明曜申领",
+            "pool_type": "special",
+            "up6_id": "wpn_lance_0014"
         }
     ])
 }
