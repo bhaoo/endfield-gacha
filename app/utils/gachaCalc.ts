@@ -14,6 +14,10 @@ export const POOL_INFO_CHAR_POOL_KEYS = [
   JOINT_POOL_KEY,
 ] as const;
 const SPECIAL_BIG_PITY_MAX = 120;
+const GIFT_INTEL_BOOK_KIND = "gift_intel_book";
+
+const filterStatisticalRecords = <T extends { kind?: string }>(data: T[]): T[] =>
+  data.filter((item) => item.kind !== GIFT_INTEL_BOOK_KIND);
 
 export const POOL_NAME_MAP: Record<string, string> = {
   "E_CharacterGachaPoolType_Special": "特许寻访",
@@ -59,7 +63,7 @@ export const parseGachaParams = (uri: string): EndfieldGachaParams | null => {
 }
 
 export const analyzePoolData = (poolKey: string, rawData: EndFieldCharInfo[]): GachaStatistics => {
-  const data = [...rawData].reverse();
+  const data = filterStatisticalRecords(rawData).reverse();
 
   let count6 = 0;
   let count5 = 0;
@@ -107,7 +111,7 @@ export const analyzeSpecialPoolData = (
   rawData: EndFieldCharInfo[],
   poolInfoById: Record<string, { pool_name?: string; up6_id?: string }> = {},
 ): GachaStatistics[] => {
-  const data = [...rawData].reverse();
+  const data = filterStatisticalRecords(rawData).reverse();
 
   let globalSmallPity = 0;
 
@@ -225,7 +229,7 @@ export const analyzeJointPoolData = (
     { pool_name?: string; up6_id?: string; up6_ids?: string[] }
   > = {},
 ): GachaStatistics[] => {
-  const data = [...rawData].reverse();
+  const data = filterStatisticalRecords(rawData).reverse();
 
   const results: GachaStatistics[] = [];
   let current: GachaStatistics | null = null;
