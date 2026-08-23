@@ -14,7 +14,7 @@ export const POOL_INFO_CHAR_POOL_KEYS = [
   JOINT_POOL_KEY,
 ] as const;
 const SPECIAL_BIG_PITY_MAX = 120;
-const GIFT_INTEL_BOOK_KIND = "gift_intel_book";
+export const GIFT_INTEL_BOOK_KIND = "gift_intel_book";
 
 const filterStatisticalRecords = <T extends { kind?: string }>(data: T[]): T[] =>
   data.filter((item) => item.kind !== GIFT_INTEL_BOOK_KIND);
