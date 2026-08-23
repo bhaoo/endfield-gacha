@@ -117,6 +117,7 @@ export interface EndFieldCharInfo {
   charId: string;
   charName: string;
   gachaTs: string;
+  kind?: string;
   isFree: boolean;
   isNew: boolean;
   poolId: string;
