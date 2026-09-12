@@ -14,10 +14,10 @@
   },
   "dependencies": {
     "@nuxt/ui": "^4.4.0",
-    "@tauri-apps/api": "^2.9.1",
-    "@tauri-apps/plugin-fs": "~2.4.5",
-    "@tauri-apps/plugin-http": "~2.5.6",
-    "@tauri-apps/plugin-opener": "~2.5.3",
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-fs": "~2.5.2",
+    "@tauri-apps/plugin-http": "~2.6.0",
+    "@tauri-apps/plugin-opener": "~2.5.5",
     "nuxt": "^4.2.2",
     "tailwindcss": "^4.1.18",
     "vue": "^3.5.27",
@@ -25,7 +25,7 @@
     "write-excel-file": "^4.1.1"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.9.6",
+    "@tauri-apps/cli": "^2.11.4",
     "@types/node": "^25.0.10",
     "nuxt-echarts": "^1.0.1"
   }
