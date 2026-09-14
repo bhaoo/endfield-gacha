@@ -228,7 +228,7 @@ definePageMeta({
   layout: 'default',
 })
 
-const PITY_BAR_MAX = 80
+const PITY_BAR_MAX = 40
 const ALL_POOLS_VALUE = '__all__'
 
 const { weaponStatistics } = useGachaSync()
