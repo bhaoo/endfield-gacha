@@ -1,334 +1,438 @@
 <template>
-  <div v-if="uid === 'none' || !uid" class="text-center text-gray-500 py-16">
-    <div class="mb-2 text-4xl">👋</div>
+  <!-- 未选择账号 -->
+  <div v-if="uid === 'none' || !uid" class="py-16 text-center text-muted">
+    <p class="mb-2 text-4xl">👋</p>
     <p class="text-lg font-medium">欢迎使用</p>
-    <p class="text-sm mt-1">请先点击左上角添加账号，或选择一个已有账号。</p>
+    <p class="mt-1 text-sm">请先点击上方「添加账号」，或选择一个已有账号。</p>
   </div>
 
-  <div v-else-if="isUserDataLoading" class="text-center text-gray-500 py-16">
-    <div class="mb-2 text-4xl">⏳</div>
+  <!-- 数据加载中 -->
+  <div v-else-if="isUserDataLoading" class="py-16 text-center text-muted">
+    <p class="mb-2 text-4xl">⏳</p>
     <p class="text-lg font-medium">正在加载数据...</p>
-    <p class="text-sm mt-1">切换账号时会读取本地记录，请稍等片刻。</p>
+    <p class="mt-1 text-sm">切换账号时会读取本地记录，请稍等片刻。</p>
   </div>
 
-  <div v-else-if="statistics.length > 0" class="grid grid-cols-1 md:grid-cols-3 gap-4">
-    <UCard v-if="selectedSpecialStat" :key="'special-pools'" class="relative">
-      <template #header>
-        <div class="flex justify-between items-start gap-3">
-          <div class="min-w-0">
-            <h3 class="text-lg font-bold truncate">特许寻访</h3>
-          </div>
-
-          <div class="flex flex-col items-end gap-1 shrink-0">
-            <USelect v-model="selectedSpecialPoolId" :items="specialPoolOptions" placeholder="选择限定池" size="sm"
-              class="w-44" />
-          </div>
-        </div>
-      </template>
-
-      <div class="absolute top-18 right-3 flex flex-col gap-1">
-        <UBadge variant="outline">当前已垫: {{ selectedSpecialStat.pityCount }} 抽</UBadge>
-        <UBadge
-          v-if="
-            !isAllSpecialSelected &&
-            selectedSpecialStat.bigPityRemaining !== undefined &&
-            selectedSpecialStat.bigPityMax !== undefined
+  <div v-else class="flex flex-col gap-4 md:h-full md:min-h-0 md:flex-row md:overflow-hidden">
+    <div
+      class="w-full shrink-0 md:w-56 md:pr-1"
+    >
+      <p class="mb-2 text-xs font-semibold tracking-wider text-muted">卡池类型</p>
+      <div class="flex gap-2 overflow-x-auto pb-1 md:flex-col md:overflow-visible md:pb-0">
+        <button
+          v-for="pool in pools"
+          :key="pool.poolId || pool.poolName"
+          type="button"
+          class="group relative flex shrink-0 flex-col gap-1 overflow-hidden rounded-xl border p-3 text-left transition-colors md:w-full"
+          :class="
+            selectedTypeKey === pool.poolType
+              ? 'border-primary bg-primary/10'
+              : 'border-default bg-elevated/40 hover:border-primary/40 hover:bg-elevated'
           "
-          :variant="(selectedSpecialStat.gotUp6) ? 'solid' : 'outline'">
-          <span v-if="selectedSpecialStat.gotUp6">已获得当期 UP</span>
-          <span v-else>大保底: {{ selectedSpecialStat.bigPityMax - selectedSpecialStat.bigPityRemaining }} / {{
-            selectedSpecialStat.bigPityMax }}</span>
-        </UBadge>
+          @click="selectType(pool.poolType)"
+        >
+          <img
+            v-if="poolImage(pool)"
+            :src="poolImage(pool)"
+            alt=""
+            aria-hidden="true"
+            class="pointer-events-none absolute -right-5 -top-3 size-24 select-none object-contain transition-all duration-300 mask-[linear-gradient(to_right,transparent,black_55%)]"
+            :class="
+              selectedTypeKey === pool.poolType
+                ? 'opacity-45 blur-none'
+                : 'opacity-20 blur-[2px] group-hover:opacity-35'
+            "
+          />
+
+          <span class="relative text-sm font-semibold leading-tight">{{ pool.poolName }}</span>
+          <span class="relative flex items-center gap-2 text-xs text-muted">
+            <span>{{ pool.totalPulls }} 抽</span>
+            <UBadge variant="subtle" size="sm" >垫 {{ pool.pityCount }} 抽</UBadge>
+          </span>
+        </button>
       </div>
+    </div>
 
-      <PieChart :data="selectedSpecialStat"></PieChart>
+    <div class="min-w-0 flex-1 space-y-4 md:overflow-y-auto md:pl-1 md:pr-2 pb-0.5">
+      <template v-if="selectedPool">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="flex items-center gap-3">
+            <!-- 特许寻访：子卡池下拉选择 -->
+            <USelect
+              v-if="isSpecialType && poolOptions.length > 0"
+              v-model="selectedPoolKey"
+              :items="poolOptions"
+              size="md"
+              class="w-52"
+            />
+            <h2 v-else class="text-lg font-bold">{{ selectedPool.poolName }}</h2>
 
-      <div class="space-y-2 text-sm">
-        <div class="flex justify-between border-b pb-1">
-          <span>总抽数:</span> <span>{{ selectedSpecialStat.totalPulls }}</span>
+            <UBadge v-if="selectedPool.isCurrentPool" color="primary" variant="subtle" size="sm">
+              当前卡池
+            </UBadge>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <UBadge variant="outline" color="neutral">
+              当前已垫：{{ selectedPool.pityCount }} 抽
+            </UBadge>
+            <UBadge
+              v-if="
+                !isAllSpecialSelected &&
+                selectedPool.bigPityRemaining !== undefined &&
+                selectedPool.bigPityMax !== undefined
+              "
+              :variant="selectedPool.gotUp6 ? 'solid' : 'outline'"
+            >
+              <span v-if="selectedPool.gotUp6">已获得当期 UP</span>
+              <span v-else>
+                大保底: {{ selectedPool.bigPityMax - selectedPool.bigPityRemaining }} / {{ selectedPool.bigPityMax }}
+              </span>
+            </UBadge>
+          </div>
         </div>
 
-        <div v-for="row in getStarRows(selectedSpecialStat)" :key="row.label"
-          class="grid grid-cols-[40px_70px_80px_1fr] gap-1 text-xs py-1 border-b border-gray-100 dark:border-gray-800 items-center">
-          <span :class="['font-bold', row.color]">{{ row.label }}</span>
+        <p class="text-sm text-muted">
+          {{ selectedPool.totalPulls }} 抽 · {{ selectedPool.count6 }} 个 6★ ·
+          {{ selectedPool.count5 }} 个 5★ · {{ selectedPool.count4 }} 个 4★
+        </p>
 
-          <span class="text-gray-600 dark:text-gray-300">
-            共 {{ row.count }} 个
-          </span>
-
-          <span class="text-gray-500">
-            占 {{ getPercent(row.count, selectedSpecialStat.totalPulls) }}%
-          </span>
-
-          <span class="text-gray-500">
-            平均 {{ getAvg(row.count, selectedSpecialStat.totalPulls) }} 抽/个
-          </span>
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <UCard class="text-center">
+            <p class="text-xs text-muted">总抽数</p>
+            <p class="mt-1 text-2xl font-bold tabular-nums">{{ selectedPool.totalPulls }}</p>
+          </UCard>
+          <UCard class="text-center">
+            <p class="text-xs text-muted">6★ 出货</p>
+            <p class="mt-1 text-2xl font-bold tabular-nums text-orange-400">{{ selectedPool.count6 }}</p>
+          </UCard>
+          <UCard class="text-center">
+            <p class="text-xs text-muted">6★ 概率</p>
+            <p class="mt-1 text-2xl font-bold tabular-nums text-orange-400">
+              {{ percent(selectedPool.count6, selectedPool.totalPulls) }}%
+            </p>
+          </UCard>
+          <UCard class="text-center">
+            <p class="text-xs text-muted">平均出货</p>
+            <p class="mt-1 text-2xl font-bold tabular-nums">
+              {{ avg(selectedPool.count6, selectedPool.totalPulls) }} 抽
+            </p>
+          </UCard>
         </div>
 
-        <div class="mt-3">
-          <p class="font-semibold mb-2 text-gray-500 text-xs">
-            6★ 历史记录:
-            <span class="font-normal text-gray-400">
-              出卡数 {{ selectedSpecialHistory6Count }} 次 · 歪 {{ selectedSpecialOffCount }} 次
-            </span>
-          </p>
+        <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <UCard>
+            <template #header>
+              <div class="flex items-center justify-between">
+                <h3 class="font-semibold">稀有度分布</h3>
+                <span class="text-xs text-muted">共 {{ selectedPool.totalPulls }} 抽</span>
+              </div>
+            </template>
+            <PieChart :data="selectedPool" />
+          </UCard>
 
-          <div v-if="selectedSpecialStat.history6.length > 0" class="flex flex-wrap gap-2">
-            <div v-for="(rec, idx) in [...selectedSpecialStat.history6].reverse()" :key="idx"
-              class="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 flex items-center gap-1 relative">
-              <span class="font-medium text-gray-700 dark:text-gray-200">
-                {{ rec.name }}
+          <UCard>
+            <template #header>
+              <h3 class="font-semibold">占比明细</h3>
+            </template>
+
+            <div class="space-y-3">
+              <div
+                v-for="row in starRows"
+                :key="row.label"
+                class="rounded-lg border border-default p-3"
+              >
+                <div class="flex items-center justify-between">
+                  <span class="flex items-center gap-2">
+                    <span class="size-2.5 rounded-full" :class="row.dot" />
+                    <span class="font-semibold" :class="row.color">{{ row.label }}</span>
+                  </span>
+                  <span class="text-sm font-bold tabular-nums">{{ row.count }} 个</span>
+                </div>
+                <div class="mt-2 flex items-center gap-3 text-xs text-muted">
+                  <span>占 {{ percent(row.count, selectedPool.totalPulls) }}%</span>
+                  <span>平均 {{ avg(row.count, selectedPool.totalPulls) }} 抽/个</span>
+                </div>
+                <UProgress
+                  :model-value="row.count"
+                  :max="selectedPool.totalPulls || 1"
+                  size="sm"
+                  :ui="{indicator: row.progressColor}"
+                  class="mt-2"
+                />
+              </div>
+            </div>
+          </UCard>
+        </div>
+
+        <UCard>
+          <template #header>
+            <div class="flex items-center justify-between">
+              <h3 class="font-semibold">6★ 历史记录</h3>
+              <span class="text-xs text-muted">
+                出卡 {{ history6.length }} 次 · 歪 {{ offCount }} 次 · 新 {{ newCount }} 个
               </span>
+            </div>
+          </template>
 
-              <span class="text-gray-400">[{{ rec.isFree ? '加急招募' : rec.pity }}]</span>
-              <span v-if="rec.isNew" class="text-red-500 font-bold ml-0.5 text-[10px]">
-                [NEW]
-              </span>
+          <div v-if="history6.length > 0" class="divide-y divide-default">
+            <div
+              v-for="(rec, idx) in history6"
+              :key="rec.name + idx"
+              class="flex items-center gap-3 py-2.5"
+            >
+              <!-- 头像（按 charId 匹配，缺失回退 user 图标） -->
+              <div class="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-elevated/50">
+                <img
+                  v-if="charAvatar(rec)"
+                  :src="charAvatar(rec)"
+                  :alt="rec.name"
+                  class="size-full object-cover object-top"
+                />
+                <UIcon v-else name="i-lucide-user" class="size-5 text-muted" />
+              </div>
 
-              <svg width="20" height="20" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg" v-if="rec.up6Id && rec.isUp === false"
-                class="absolute -top-2 -right-2 select-none">
-                <circle cx="150" cy="150" r="140" fill="oklch(55.1% 0.027 264.364)" />
-                <text x="50%" y="50%"
-                  transform="rotate(15, 150, 150)"
-                  font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif"
-                  font-weight="bold" font-size="180" text-anchor="middle" dominant-baseline="central"
-                  fill="white">歪</text>
-              </svg>
+              <div class="w-24 md:w-36 min-w-0 shrink-0">
+                <p class="truncate text-sm font-medium">{{ rec.name }}</p>
+                <p v-if="isAllSpecialSelected && rec.poolName" class="truncate text-xs text-muted">
+                  {{ rec.poolName }}
+                </p>
+              </div>
+
+              <div class="flex w-24 shrink-0 items-center justify-end gap-1.5">
+                <UBadge v-if="rec.isUp" color="primary" variant="subtle" size="sm">UP</UBadge>
+                <UBadge v-if="isOff(rec)" color="error" variant="subtle" size="sm">歪</UBadge>
+                <UBadge v-else-if="rec.isNew" color="success" variant="subtle" size="sm">新</UBadge>
+                <UBadge v-if="rec.isFree" color="warning" variant="subtle" size="sm">加急</UBadge>
+              </div>
+
+              <!-- 抽数 + 进度条（满 80） -->
+              <div class="min-w-0 flex-1">
+                <div class="flex items-center gap-2">
+                  <UProgress
+                    :model-value="Math.min(rec.pity, 80)"
+                    :max="80"
+                    class="h-2"
+                    :ui="{ indicator: barColor(rec) }"
+                  />
+                  <span class="w-14 shrink-0 text-right text-sm font-semibold tabular-nums">
+                    {{ rec.pity }}<span class="text-xs font-normal text-muted">/80</span>
+                  </span>
+                </div>
+              </div>
             </div>
           </div>
 
-          <div v-else class="text-xs text-gray-400 italic">
-            暂无6星记录
+          <div v-else class="py-8 text-center text-sm text-muted">
+            暂无 6★ 记录
           </div>
-        </div>
-      </div>
-    </UCard>
-
-    <UCard v-for="stat in otherStats" :key="stat.poolId || stat.poolName">
-      <template #header>
-        <div class="flex justify-between items-center">
-          <h3 class="text-lg font-bold">{{ stat.poolName }}</h3>
-          <UBadge>
-            当前已垫: {{ stat.pityCount }} 抽
-          </UBadge>
-        </div>
+        </UCard>
       </template>
 
-      <PieChart :data="stat"></PieChart>
-
-      <div class="space-y-2 text-sm">
-        <div class="flex justify-between border-b pb-1">
-          <span>总抽数:</span> <span>{{ stat.totalPulls }}</span>
-        </div>
-
-        <div v-for="row in getStarRows(stat)" :key="row.label"
-          class="grid grid-cols-[40px_70px_80px_1fr] gap-1 text-xs py-1 border-b border-gray-100 dark:border-gray-800 items-center">
-          <span :class="['font-bold', row.color]">{{ row.label }}</span>
-
-          <span class="text-gray-600 dark:text-gray-300">
-            共 {{ row.count }} 个
-          </span>
-
-          <span class="text-gray-500">
-            占 {{ getPercent(row.count, stat.totalPulls) }}%
-          </span>
-
-          <span class="text-gray-500">
-            平均 {{ getAvg(row.count, stat.totalPulls) }} 抽/个
-          </span>
-        </div>
-
-        <div class="mt-3">
-          <p class="font-semibold mb-2 text-gray-500 text-xs">6★ 历史记录:</p>
-
-          <div v-if="stat.history6.length > 0" class="flex flex-wrap gap-2">
-            <div v-for="(rec, idx) in [...stat.history6].reverse()" :key="idx"
-              class="text-xs bg-gray-100 dark:bg-gray-800 px-2 py-1 rounded border border-gray-200 dark:border-gray-700 flex items-center gap-1 relative">
-              <span class="font-medium text-gray-700 dark:text-gray-200">
-                {{ rec.name }}
-              </span>
-
-              <span class="text-gray-400">[{{ rec.isFree ? '加急招募' : rec.pity }}]</span>
-
-              <span v-if="rec.isNew" class="text-red-500 font-bold ml-0.5 text-[10px]">
-                [NEW]
-              </span>
-
-              <svg width="20" height="20" viewBox="0 0 300 300" xmlns="http://www.w3.org/2000/svg"
-                v-if="isJointPoolStat(stat) && rec.up6Id && rec.isUp === false"
-                class="absolute -top-2 -right-2 select-none">
-                <circle cx="150" cy="150" r="140" fill="oklch(55.1% 0.027 264.364)" />
-                <text x="50%" y="50%" transform="rotate(15, 150, 150)"
-                  font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif"
-                  font-weight="bold" font-size="180" text-anchor="middle" dominant-baseline="central"
-                  fill="white">歪</text>
-              </svg>
-            </div>
-          </div>
-
-          <div v-else class="text-xs text-gray-400 italic">
-            暂无6星记录
-          </div>
-        </div>
+      <div v-else-if="isSystem" class="py-16 text-center text-muted">
+        <p class="mb-2 text-4xl">👋</p>
+        <p class="text-lg font-medium">欢迎使用 Endfield Gacha !</p>
+        <p class="mt-3 text-sm">
+          当前选择的账号为 <b>{{ systemLabel }}</b>，即从客户端 WebView 日志中获取寻访记录数据。
+        </p>
+        <p class="mt-1 text-sm">请先在游戏内打开一次抽卡记录页，再点击「同步最新数据」。</p>
       </div>
-    </UCard>
-  </div>
 
-  <div v-else-if="isSystem && statistics.length <= 0" class="text-center text-gray-500 py-16">
-    <div class="mb-2 text-4xl">👋</div>
-    <p class="text-lg font-medium mt-5">欢迎使用 Endfield Gacha !</p>
-    <p class="text-sm mt-3">当前选择的账号为 <b>{{ systemLabel }}</b> ，即从客户端 WebView 日志中获取寻访记录数据。</p>
-    <p class="text-sm mt-1">请先在游戏内打开一次抽卡记录页，再点击“同步最新数据”。</p>
-  </div>
-  <div v-else class="text-center text-gray-500 py-10">
-    暂无角色数据，请点击“同步最新数据”获取。
+      <div v-else class="py-16 text-center text-muted">
+        <p class="mb-2 text-4xl">🎴</p>
+        <p class="text-lg font-medium">暂无角色抽卡数据</p>
+        <p class="mt-1 text-sm">请先点击「同步最新数据」获取寻访记录。</p>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { isSystemUid, systemUidLabel, SYSTEM_UID_CN } from '~/utils/systemAccount'
-import type { GachaStatistics } from '~/types/gacha'
+import type { GachaStatistics, HistoryRecord } from '~/types/gacha'
 import { sortHistory6Desc } from '~/utils/historySort'
+import { isSystemUid, systemUidLabel, SYSTEM_UID_CN } from '~/utils/systemAccount'
+import specialPoolImg from '~/assets/images/pool/character_special.png'
+import standardPoolImg from '~/assets/images/pool/character_standard.png'
+import beginnerPoolImg from '~/assets/images/pool/character_beginner.png'
+import jointPoolImg from '~/assets/images/pool/character_joint.png'
 
+definePageMeta({
+  layout: 'default',
+})
+
+const SPECIAL_KEY = 'E_CharacterGachaPoolType_Special'
+const STANDARD_KEY = 'E_CharacterGachaPoolType_Standard'
+const BEGINNER_KEY = 'E_CharacterGachaPoolType_Beginner'
+const JOINT_KEY = 'E_CharacterGachaPoolType_Joint'
+
+
+const POOL_IMAGE_MAP: Record<string, string> = {
+  [SPECIAL_KEY]: specialPoolImg,
+  [STANDARD_KEY]: standardPoolImg,
+  [BEGINNER_KEY]: beginnerPoolImg,
+  [JOINT_KEY]: jointPoolImg
+}
+
+// 角色头像预加载
+const avatarModules = import.meta.glob<string>('~/assets/images/character/*.png', {
+  eager: true,
+  query: '?url',
+  import: 'default'
+})
+
+const AVATAR_MAP: Record<string, string> = Object.fromEntries(
+  Object.entries(avatarModules).map(([path, url]) => [
+    path.split('/').pop()!.replace(/\.png$/, ''),
+    url,
+  ]),
+)
+
+const charAvatar = (rec: HistoryRecord) => (rec.charId ? AVATAR_MAP[rec.charId] || '' : '')
+
+const { charStatistics } = useGachaSync()
 const { currentUser: uid } = useUserStore()
-const { charStatistics: statistics } = useGachaSync();
 const isUserDataLoading = useState<boolean>('gacha-user-data-loading', () => false)
-
 const isSystem = computed(() => isSystemUid(uid.value))
 const systemLabel = computed(() => systemUidLabel(uid.value || SYSTEM_UID_CN))
 
-const SPECIAL_POOL_TYPE = 'E_CharacterGachaPoolType_Special'
-const JOINT_POOL_TYPE = 'E_CharacterGachaPoolType_Joint'
-const ALL_SPECIAL_VALUE = '__all__'
-
-const specialStats = computed(() =>
-  (statistics.value || []).filter((s) => s.poolType === SPECIAL_POOL_TYPE),
+// 特许寻访
+const specialSubPools = computed<GachaStatistics[]>(() =>
+  (charStatistics.value || []).filter((s) => s.poolType === SPECIAL_KEY),
 )
 
-const otherStats = computed(() =>
-  (statistics.value || []).filter((s) => s.poolType !== SPECIAL_POOL_TYPE),
+// 非特许寻访（基础/启程）
+const singlePools = computed<GachaStatistics[]>(() =>
+  (charStatistics.value || []).filter((s) => s.poolType !== SPECIAL_KEY),
 )
 
-const isJointPoolStat = (stat: GachaStatistics) => stat.poolType === JOINT_POOL_TYPE
-
-const specialPoolOptions = computed(() =>
-  [
-    ...(specialStats.value.length > 1 ? [{ label: '全部', value: ALL_SPECIAL_VALUE }] : []),
-    ...specialStats.value.map((s) => ({
-      label: s.poolName,
-      value: s.poolId || s.poolName,
-    })),
-  ],
-)
-
-const selectedSpecialPoolId = ref<string>('')
-const isAllSpecialSelected = computed(() => selectedSpecialPoolId.value === ALL_SPECIAL_VALUE)
-
-watch(
-  specialStats,
-  (list) => {
-    if (!list || list.length <= 0) {
-      selectedSpecialPoolId.value = ''
-      return
-    }
-
-    const selectedKey = selectedSpecialPoolId.value
-    if (selectedKey === ALL_SPECIAL_VALUE) {
-      if (list.length > 1) return
-      selectedSpecialPoolId.value = (list[0]!.poolId || list[0]!.poolName) as string
-      return
-    }
-
-    // 当存在多个特许池时默认选“全部”
-    if (!selectedKey) {
-      if (list.length > 1) {
-        selectedSpecialPoolId.value = ALL_SPECIAL_VALUE
-        return
-      }
-    }
-    const isValid = list.some((s) => (s.poolId || s.poolName) === selectedKey)
-    if (isValid) return
-
-    const current = list.find((s) => s.isCurrentPool)
-    if (list.length > 1) {
-      selectedSpecialPoolId.value = ALL_SPECIAL_VALUE
-      return
-    }
-
-    selectedSpecialPoolId.value =
-      (current?.poolId ||
-        current?.poolName ||
-        list[0]!.poolId ||
-        list[0]!.poolName) as string
-  },
-  { immediate: true },
-)
-
-const allSpecialStat = computed<GachaStatistics | undefined>(() => {
-  const list = specialStats.value || []
-  if (list.length <= 0) return undefined
-
+// 跨子池聚合
+const aggregatePools = (
+  list: GachaStatistics[],
+  poolType: string,
+  poolName: string,
+): GachaStatistics => {
   const current = list.find((s) => s.isCurrentPool) || list[0]!
-  const totalPulls = list.reduce((sum, s) => sum + (s.totalPulls || 0), 0)
-  const count6 = list.reduce((sum, s) => sum + (s.count6 || 0), 0)
-  const count5 = list.reduce((sum, s) => sum + (s.count5 || 0), 0)
-  const count4 = list.reduce((sum, s) => sum + (s.count4 || 0), 0)
-
-  const history6 = sortHistory6Desc(list.flatMap((s) => s.history6 || []))
+  const sum = (pick: (s: GachaStatistics) => number) =>
+    list.reduce((acc, s) => acc + (pick(s) || 0), 0)
 
   return {
-    poolType: SPECIAL_POOL_TYPE,
-    poolName: '全部',
-    totalPulls,
-    pityCount: current.pityCount || 0,
-    count6,
-    count5,
-    count4,
-    history6,
+    poolType,
+    poolId: `${poolType}_all`,
+    poolName,
+    totalPulls: sum((s) => s.totalPulls),
+    // 垫抽跨池继承，取当前池的实时进度
+    pityCount: current.pityCount,
+    bigPityMax: current.bigPityMax,
+    bigPityRemaining: current.bigPityRemaining,
+    paidPulls: sum((s) => s.paidPulls || 0),
+    count6: sum((s) => s.count6),
+    count5: sum((s) => s.count5),
+    count4: sum((s) => s.count4),
+    history6: sortHistory6Desc(list.flatMap((s) => s.history6 || [])),
   }
-})
-
-const selectedSpecialStat = computed<GachaStatistics | undefined>(() => {
-  if (specialStats.value.length <= 0) return undefined
-  if (selectedSpecialPoolId.value === ALL_SPECIAL_VALUE) {
-    return allSpecialStat.value || specialStats.value[0]
-  }
-  const key = selectedSpecialPoolId.value
-  return (
-    specialStats.value.find((s) => (s.poolId || s.poolName) === key) ||
-    specialStats.value[0]
-  )
-})
-
-const selectedSpecialHistory6Count = computed(
-  () => selectedSpecialStat.value?.history6?.length || 0,
-)
-const selectedSpecialOffCount = computed(
-  () =>
-    (selectedSpecialStat.value?.history6 || []).filter(
-      (r) => !!r.up6Id && r.isUp === false,
-    ).length,
-)
-
-interface StarRow {
-  label: string;
-  count: number;
-  color: string;
 }
 
-const getStarRows = (stat: any): StarRow[] => [
-  { label: '6★', count: stat.count6, color: 'text-orange-400' },
-  { label: '5★', count: stat.count5, color: 'text-yellow-400' },
-  { label: '4★', count: stat.count4, color: 'text-purple-500' },
-];
+// 卡池类型列表
+const pools = computed<GachaStatistics[]>(() => {
+  const list: GachaStatistics[] = []
+  if (specialSubPools.value.length > 0) {
+    list.push(aggregatePools(specialSubPools.value, SPECIAL_KEY, '特许寻访'))
+  }
+  list.push(...singlePools.value)
+  return list
+})
 
-const getPercent = (count: number, total: number) => {
-  if (total <= 0) return '0.00';
-  return ((count / total) * 100).toFixed(2);
-};
+// 特许寻访：子卡池选项（第一项为「全部卡池」聚合视图）
+const ALL_SPECIAL_VALUE = '__all__'
 
-const getAvg = (count: number, total: number) => {
-  if (count <= 0) return '0.00';
-  return (total / count).toFixed(2);
-};
+const poolOptions = computed(() => {
+  if (specialSubPools.value.length <= 0) return []
+  return [
+    { label: '全部卡池', value: ALL_SPECIAL_VALUE },
+    ...specialSubPools.value.map((s) => ({
+      label: s.poolName,
+      value: s.poolId as string,
+    })),
+  ]
+})
+
+// 「全部卡池」聚合视图（无子池时返回 undefined 走空态）
+const allSpecialStat = computed<GachaStatistics | undefined>(() => {
+  if (specialSubPools.value.length <= 0) return undefined
+  return aggregatePools(specialSubPools.value, SPECIAL_KEY, '全部卡池')
+})
+
+const selectedPoolKey = ref<string>(ALL_SPECIAL_VALUE)
+const selectedTypeKey = ref<string>(SPECIAL_KEY)
+
+const isSpecialType = computed(() => selectedTypeKey.value === SPECIAL_KEY)
+
+const isAllSpecialSelected = computed(
+  () => isSpecialType.value && selectedPoolKey.value === ALL_SPECIAL_VALUE,
+)
+
+const selectedPool = computed<GachaStatistics | undefined>(() => {
+  if (isSpecialType.value) {
+    if (selectedPoolKey.value === ALL_SPECIAL_VALUE) return allSpecialStat.value
+    return (
+      specialSubPools.value.find((s) => s.poolId === selectedPoolKey.value) ||
+      allSpecialStat.value
+    )
+  }
+  return pools.value.find((p) => p.poolType === selectedTypeKey.value)
+})
+
+const poolImage = (pool: GachaStatistics) => POOL_IMAGE_MAP[pool.poolType || ''] || ''
+
+// 切换卡池类型：仅特许寻访有子池，其余类型直接展示
+const selectType = (poolType?: string) => {
+  if (!poolType) return
+  selectedTypeKey.value = poolType
+  if (poolType === SPECIAL_KEY) {
+    selectedPoolKey.value = ALL_SPECIAL_VALUE
+  }
+}
+
+const history6 = computed(() => selectedPool.value?.history6 || [])
+
+const offCount = computed(() => history6.value.filter((r) => isOff(r)).length)
+const newCount = computed(() => history6.value.filter((r) => !!r.isNew).length)
+
+const isOff = (rec: HistoryRecord) => !!rec.up6Id && rec.isUp === false
+
+const percent = (count: number, total: number) => {
+  if (total <= 0) return '0.00'
+  return ((count / total) * 100).toFixed(2)
+}
+
+const avg = (count: number, total: number) => {
+  if (count <= 0) return '0.00'
+  return (total / count).toFixed(1)
+}
+
+// 进度条颜色：UP+加急 → 金红渐变；UP 非加急 或 非 UP+加急 → 橙；非 UP 非加急（歪）→ 黄
+const barColor = (rec: HistoryRecord) => {
+  const isUp = !!rec.isUp
+  const isFree = !!rec.isFree
+  if (isUp && isFree) {
+    return 'bg-[linear-gradient(90deg,#fde047,#fbbf24,#f59e0b,#dc2626,#7f1d1d)]'
+  }
+  if ((isUp && !isFree) || (!isUp && isFree)) return 'bg-orange-400'
+  return 'bg-yellow-400'
+}
+
+const starRows = computed(() => {
+  const s = selectedPool.value
+  if (!s) return []
+  return [
+    { label: '6★', count: s.count6, color: 'text-orange-400', dot: 'bg-orange-400', progressColor: 'bg-orange-400' },
+    { label: '5★', count: s.count5, color: 'text-yellow-400', dot: 'bg-yellow-400', progressColor: 'bg-yellow-400' },
+    { label: '4★', count: s.count4, color: 'text-purple-500', dot: 'bg-purple-500', progressColor: 'bg-purple-500' },
+  ]
+})
+
+const pityProgressMax = computed(() => selectedPool.value?.bigPityMax || 80)
+const pityProgressValue = computed(() =>
+  Math.min(selectedPool.value?.pityCount || 0, pityProgressMax.value),
+)
 </script>

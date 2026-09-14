@@ -1,0 +1,236 @@
+<template>
+  <div class="flex h-screen overflow-hidden">
+    <AppSidebar />
+
+    <div class="flex min-w-0 flex-1 flex-col">
+      <UContainer class="flex min-h-0 flex-1 flex-col space-y-3 py-3">
+        <!-- 顶部工具栏 -->
+        <div class="flex shrink-0 flex-wrap items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <UButton @click="onSyncClick" color="primary" :loading="syncMode === 'latest' && isSyncing" :disabled="isSyncing">
+              {{ isSyncing && syncMode === 'latest' ? '同步中...' : '同步最新数据' }}
+            </UButton>
+            <UButton @click="onFullBackupClick" color="neutral" variant="outline" :loading="syncMode === 'full' && isSyncing"
+              :disabled="isSyncing">
+              {{ isSyncing && syncMode === 'full' ? '同步中...' : '全量同步' }}
+            </UButton>
+            <AddAccount @success="handleAccountAdded"></AddAccount>
+            <SelectAccount v-model="uid"></SelectAccount>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <UTooltip text="抽卡共消耗的嵌晶玉" v-if="hasCharGachaData">
+              <div
+                class="rounded-md font-medium inline-flex items-center text-sm ring ring-red-300 ring-inset text-default bg-default p-1.5"
+              >
+                <img class="block w-5 h-5 relative top-0.4 mr-1" src="assets/images/oroberyl.png" />
+                <span class="tabular-nums">{{ oroberylCostDisplay }}</span>
+              </div>
+            </UTooltip>
+            <UTooltip text="抽卡共消耗的武库配额" v-if="hasCharGachaData">
+              <div
+                class="rounded-md font-medium inline-flex items-center text-sm ring ring-blue-300 ring-inset text-default bg-default p-1.5"
+              >
+                <img class="block w-5 h-5 relative top-0.4 mr-1" src="assets/images/arsenal_ticket.png" />
+                <span class="tabular-nums">{{ arsenalTicketCostDisplay }}</span>
+              </div>
+            </UTooltip>
+            <USeparator v-if="isSyncing && syncProgress.poolName" orientation="vertical" class="h-6 mx-2" />
+            <UBadge v-if="isSyncing && syncProgress.poolName" color="neutral" variant="outline">
+              正在获取：{{ syncProgress.poolName }} · 第 {{ syncProgress.page }} 页
+            </UBadge>
+          </div>
+        </div>
+
+        <!-- 页面内容（可滚动） -->
+        <div class="min-h-0 flex-1 overflow-y-auto p-1">
+          <slot />
+        </div>
+      </UContainer>
+    </div>
+
+    <UModal
+      v-model:open="isFullSyncConfirmOpen"
+      title="全量同步"
+    >
+      <template #body>
+        <p class="text-sm text-gray-600 dark:text-gray-400">
+          全量同步会重新拉取当前卡池的全部记录，耗时更长，是否继续？
+          <br/>建议仅在<b>数据异常或需要完整重建</b>时使用该功能。
+        </p>
+      </template>
+
+      <template #footer>
+        <div class="flex w-full justify-end gap-2">
+          <UButton
+            color="neutral"
+            variant="ghost"
+            :disabled="isSyncing"
+            @click="isFullSyncConfirmOpen = false"
+          >
+            取消
+          </UButton>
+          <UButton
+            color="error"
+            :loading="syncMode === 'full' && isSyncing"
+            :disabled="isSyncing"
+            @click="onConfirmFullBackup"
+          >
+            确认全量同步
+          </UButton>
+        </div>
+      </template>
+    </UModal>
+  </div>
+</template>
+
+<script lang="ts" setup>
+import { invoke } from '@tauri-apps/api/core';
+import { isSystemUid } from '~/utils/systemAccount'
+
+const { charRecords, weaponRecords, isSyncing, syncProgress, handleSync, loadCharData, loadWeaponData } = useGachaSync();
+
+const { loadConfig, currentUser: uid } = useUserStore();
+const { isWindows, detect: detectPlatform } = usePlatform();
+const { checkForUpdate } = useUpdate();
+const route = useRoute()
+const syncMode = ref<'latest' | 'full' | null>(null)
+const isFullSyncConfirmOpen = ref(false)
+const isUserDataLoading = useState<boolean>('gacha-user-data-loading', () => false)
+let userDataLoadSeq = 0
+
+const CHARACTER_OROBERYL_PER_PULL = 500
+const WEAPON_ARSENAL_TICKET_PER_TEN_PULL = 1980
+const WEAPON_ARSENAL_TICKET_PER_PULL = WEAPON_ARSENAL_TICKET_PER_TEN_PULL / 10
+
+const summarizeTotalPulls = (records: Record<string, any[]> | undefined | null) => {
+  let total = 0
+  for (const list of Object.values(records || {})) {
+    if (!Array.isArray(list) || list.length <= 0) continue
+    total += list.length
+  }
+  return total
+}
+
+const summarizeCharPaidPulls = (records: Record<string, any[]> | undefined | null) => {
+  let paid = 0
+  for (const list of Object.values(records || {})) {
+    if (!Array.isArray(list) || list.length <= 0) continue
+    for (const it of list) {
+      // 角色池：不计算免费抽（isFree === true）
+      if (it && it.isFree === true) continue
+      paid++
+    }
+  }
+  return paid
+}
+
+const charTotalPulls = computed(() => summarizeTotalPulls(charRecords.value as any))
+const charPaidPulls = computed(() => summarizeCharPaidPulls(charRecords.value as any))
+const weaponTotalPulls = computed(() => summarizeTotalPulls(weaponRecords.value as any))
+
+const hasCharGachaData = computed(() => charTotalPulls.value > 0)
+const hasWeaponGachaData = computed(() => weaponTotalPulls.value > 0)
+
+const oroberylCost = computed(() => charPaidPulls.value * CHARACTER_OROBERYL_PER_PULL)
+const arsenalTicketCost = computed(() =>
+  Math.round(weaponTotalPulls.value * WEAPON_ARSENAL_TICKET_PER_PULL),
+)
+
+const formatK = (value: number) => {
+  if (!Number.isFinite(value)) return '0'
+  if (value > 99000) {
+    // 截断到 0.1k，避免四舍五入显示比实际更高
+    const k = Math.floor(value / 100) / 10
+    const s = Number.isInteger(k) ? k.toFixed(0) : k.toFixed(1)
+    return `${s.replace(/\.0$/, '')}k`
+  }
+  return String(value)
+}
+
+const oroberylCostDisplay = computed(() => formatK(oroberylCost.value))
+const arsenalTicketCostDisplay = computed(() => formatK(arsenalTicketCost.value))
+
+watch(isSyncing, (v) => {
+  if (!v) syncMode.value = null
+})
+
+const loadAllData = async (uidToLoad: string) => {
+  console.log(`正在加载 UID ${uidToLoad} 的所有数据...`);
+  const seq = ++userDataLoadSeq
+  isUserDataLoading.value = true
+  try {
+    await Promise.all([loadCharData(uidToLoad), loadWeaponData(uidToLoad)])
+  } finally {
+    if (seq === userDataLoadSeq && uid.value === uidToLoad) {
+      isUserDataLoading.value = false
+    }
+  }
+}
+
+const onWebDavLocalChanged = async (event: Event) => {
+  const detail = (event as CustomEvent<{ accountKeys?: string[] }>).detail
+  const changedKeys = Array.isArray(detail?.accountKeys) ? detail.accountKeys : []
+  if (!uid.value || uid.value === 'none' || changedKeys.length <= 0) return
+  if (!changedKeys.includes(uid.value)) return
+
+  charRecords.value = {}
+  weaponRecords.value = {}
+  await loadAllData(uid.value)
+}
+
+watch(uid, async (newUid) => {
+  if (newUid && newUid !== 'none') {
+    charRecords.value = {};
+    weaponRecords.value = {};
+    await loadAllData(newUid);
+  } else {
+    charRecords.value = {};
+    weaponRecords.value = {};
+    isUserDataLoading.value = false
+  }
+});
+
+onMounted(async () => {
+  window.addEventListener('webdav-local-changed', onWebDavLocalChanged as EventListener)
+  await invoke('ensure_pool_info_defaults').catch(console.error)
+  await detectPlatform();
+  await loadConfig();
+
+  if (!isWindows.value && isSystemUid(uid.value)) {
+    uid.value = 'none';
+    return;
+  }
+
+  if (uid.value && uid.value !== 'none') {
+    charRecords.value = {};
+    weaponRecords.value = {};
+    await loadAllData(uid.value);
+  }
+
+  checkForUpdate().catch(console.error);
+});
+const gachaType = computed(() => {
+  return route.path.startsWith('/weapon') ? 'weapon' : 'char'
+})
+const onSyncClick = () => {
+  syncMode.value = 'latest'
+  handleSync(uid.value, gachaType.value);
+}
+
+const onFullBackupClick = () => {
+  if (isSyncing.value) return
+  isFullSyncConfirmOpen.value = true
+}
+
+const onConfirmFullBackup = () => {
+  if (isSyncing.value) return
+  isFullSyncConfirmOpen.value = false
+  syncMode.value = 'full'
+  handleSync(uid.value, gachaType.value, { full: true })
+}
+
+const handleAccountAdded = () => {
+  console.log('账号添加成功，全局列表已自动更新');
+};
+</script>
