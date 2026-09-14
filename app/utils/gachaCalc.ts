@@ -16,6 +16,19 @@ export const POOL_INFO_CHAR_POOL_KEYS = [
 const SPECIAL_BIG_PITY_MAX = 120;
 export const GIFT_INTEL_BOOK_KIND = "gift_intel_book";
 
+export const WEAPON_LIMITED_POOL_TYPE = "special" as const;
+export const WEAPON_CONSTANT_POOL_TYPE = "constant" as const;
+export const WEAPON_POOL_TYPE_LABELS: Record<string, string> = {
+  [WEAPON_LIMITED_POOL_TYPE]: "限定武器池",
+  [WEAPON_CONSTANT_POOL_TYPE]: "非限定武器池",
+};
+
+// 常驻申领池的 poolId 带 constant 段（如 weaponbox_constant_2）：含 constant 即非限定，否则限定
+export const resolveWeaponPoolType = (poolId: string): string =>
+  String(poolId || "").toLowerCase().includes(WEAPON_CONSTANT_POOL_TYPE)
+    ? WEAPON_CONSTANT_POOL_TYPE
+    : WEAPON_LIMITED_POOL_TYPE;
+
 const filterStatisticalRecords = <T extends { kind?: string }>(data: T[]): T[] =>
   data.filter((item) => item.kind !== GIFT_INTEL_BOOK_KIND);
 
@@ -78,6 +91,7 @@ export const analyzePoolData = (poolKey: string, rawData: EndFieldCharInfo[]): G
       count6++;
       historyRecords.push({
         name: item.charName,
+        charId: item.charId,
         pity: pullsSinceLast6,
         isNew: item.isNew,
         gachaTs: item.gachaTs,
@@ -192,6 +206,7 @@ export const analyzeSpecialPoolData = (
       current.count6++;
       current.history6.push({
         name: item.charName,
+        charId: item.charId,
         pity: globalSmallPity,
         isNew: item.isNew,
         isFree,
@@ -299,6 +314,7 @@ export const analyzeJointPoolData = (
       current.count6++;
       current.history6.push({
         name: item.charName,
+        charId: item.charId,
         pity: isFree ? 0 : paidPity,
         isNew: item.isNew,
         isFree,
@@ -334,7 +350,7 @@ export const analyzeWeaponPoolData = (
   rawData: EndFieldWeaponInfo[],
   up6Id?: string,
 ): GachaStatistics => {
-  const data = [...rawData].reverse();
+  const data = filterStatisticalRecords(rawData).reverse();
 
   let count6 = 0;
   let count5 = 0;
@@ -380,6 +396,7 @@ export const analyzeWeaponPoolData = (
   return {
     poolId: poolKey,
     poolName: displayPoolName,
+    poolType: resolveWeaponPoolType(poolKey),
     totalPulls: data.length,
     pityCount: pullsSinceLast6,
     up6Id,

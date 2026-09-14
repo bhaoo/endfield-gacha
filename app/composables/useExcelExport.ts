@@ -3,6 +3,7 @@ import { downloadDir, join } from "@tauri-apps/api/path";
 import type { Cell } from "write-excel-file/browser";
 import type { EndFieldCharInfo, EndFieldWeaponInfo, User } from "~/types/gacha";
 import { GIFT_INTEL_BOOK_KIND } from "~/utils/gachaCalc";
+import { compareSeqId } from "~/utils/seqId";
 
 type ExportCell = string | number | Cell;
 type ExportRow = ExportCell[];
@@ -31,21 +32,6 @@ const EXPORT_HEADERS = [
 ] as const;
 
 const isDigitsOnly = (value: string) => /^\d+$/.test(value);
-
-const compareSeqId = (a: string, b: string) => {
-  if (a === b) return 0;
-
-  const aDigits = isDigitsOnly(a);
-  const bDigits = isDigitsOnly(b);
-
-  if (aDigits && bDigits) {
-    if (a.length !== b.length) return a.length > b.length ? 1 : -1;
-    return a.localeCompare(b);
-  }
-
-  if (aDigits !== bDigits) return aDigits ? 1 : -1;
-  return a.localeCompare(b);
-};
 
 // gachaTs 在接口里是字符串，导出时统一按本地 24 小时制格式化。
 const normalizeTimestampMs = (value?: string) => {

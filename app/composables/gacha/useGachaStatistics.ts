@@ -14,6 +14,7 @@ import {
   POOL_TYPES,
   SPECIAL_POOL_KEY,
 } from "~/utils/gachaCalc";
+import { compareSeqId } from "~/utils/seqId";
 
 export const useGachaStatistics = (params: {
   charRecords: Ref<Record<string, EndFieldCharInfo[]>>;
@@ -49,18 +50,55 @@ export const useGachaStatistics = (params: {
   const weaponStatistics = computed(() => {
     if (!params.weaponRecords.value) return [];
 
-    const weaponUp6ByPoolId: Record<string, string> = {};
+    const weaponInfoByPoolId: Record<string, PoolInfoEntry> = {};
     for (const it of params.poolInfo.value || []) {
       if (!it) continue;
       if (it.pool_gacha_type !== "weapon") continue;
       if (!it.pool_id) continue;
-      if (!it.up6_id) continue;
-      weaponUp6ByPoolId[it.pool_id] = it.up6_id;
+      weaponInfoByPoolId[it.pool_id] = it;
     }
 
-    return Object.keys(params.weaponRecords.value).map((k) =>
-      analyzeWeaponPoolData(k, params.weaponRecords.value[k]!, weaponUp6ByPoolId[k]),
-    );
+    // seqId 全局递增：各池取自身最大值，其中最大者即当前池
+    const maxSeqIdByPool: Record<string, string> = {};
+    let currentPoolId = "";
+    let globalMaxSeqId = "";
+    for (const [poolKey, list] of Object.entries(params.weaponRecords.value)) {
+      for (const item of list || []) {
+        const seqId = String(item?.seqId || "");
+        if (!seqId) continue;
+        const poolMax = maxSeqIdByPool[poolKey];
+        if (!poolMax || compareSeqId(seqId, poolMax) > 0) {
+          maxSeqIdByPool[poolKey] = seqId;
+        }
+      }
+
+      const poolMaxSeqId = maxSeqIdByPool[poolKey];
+      if (!poolMaxSeqId) continue;
+      if (!globalMaxSeqId || compareSeqId(poolMaxSeqId, globalMaxSeqId) > 0) {
+        globalMaxSeqId = poolMaxSeqId;
+        currentPoolId = poolKey;
+      }
+    }
+
+    return Object.keys(params.weaponRecords.value)
+      .sort((a, b) => {
+        const aMax = maxSeqIdByPool[a];
+        const bMax = maxSeqIdByPool[b];
+        if (!aMax && !bMax) return 0;
+        if (!aMax) return 1;
+        if (!bMax) return -1;
+        return compareSeqId(bMax, aMax);
+      })
+      .map((poolKey) => {
+        const info = weaponInfoByPoolId[poolKey];
+        const stat = analyzeWeaponPoolData(
+          poolKey,
+          params.weaponRecords.value[poolKey]!,
+          info?.up6_id,
+        );
+        stat.isCurrentPool = poolKey === currentPoolId;
+        return stat;
+      });
   });
 
   return { charStatistics, weaponStatistics };

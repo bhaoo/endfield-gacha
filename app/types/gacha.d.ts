@@ -150,6 +150,7 @@ export interface EndFieldGachaData {
 
 export interface HistoryRecord {
   name: string;
+  charId?: string;
   pity: number;
   isNew: boolean;
   isFree?: boolean;

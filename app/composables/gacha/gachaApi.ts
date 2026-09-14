@@ -7,6 +7,7 @@ import {
   POOL_NAME_MAP,
   POOL_INFO_CHAR_POOL_KEYS,
 } from "~/utils/gachaCalc";
+import { compareSeqId } from "~/utils/seqId";
 
 export const createGachaApi = (deps: {
   userAgent: Ref<string>;
@@ -58,23 +59,6 @@ export const createGachaApi = (deps: {
   };
 
   const MAX_PAGE_RETRY = 3;
-
-  const isDigitsOnly = (value: string) => /^\d+$/.test(value);
-
-  const compareSeqId = (a: string, b: string) => {
-    if (a === b) return 0;
-
-    const aDigits = isDigitsOnly(a);
-    const bDigits = isDigitsOnly(b);
-
-    if (aDigits && bDigits) {
-      if (a.length !== b.length) return a.length > b.length ? 1 : -1;
-      return a.localeCompare(b);
-    }
-
-    if (aDigits !== bDigits) return aDigits ? 1 : -1;
-    return a.localeCompare(b);
-  };
 
   const fetchPaginatedData = async <T extends GachaItem>(
     u8_token: string,

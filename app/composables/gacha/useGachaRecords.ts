@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Ref } from "vue";
 import type { EndFieldCharInfo, EndFieldWeaponInfo, GachaItem } from "~/types/gacha";
+import { compareSeqId } from "~/utils/seqId";
 
 export const useGachaRecords = (params?: {
   loadPoolInfo?: () => Promise<void>;
@@ -14,25 +15,6 @@ export const useGachaRecords = (params?: {
     "gacha-records-weapon",
     () => ({}),
   );
-
-  const isDigitsOnly = (value: string) => /^\d+$/.test(value);
-
-  const compareSeqId = (a: string, b: string) => {
-    if (a === b) return 0;
-
-    const aDigits = isDigitsOnly(a);
-    const bDigits = isDigitsOnly(b);
-
-    // Most seqId are numeric strings. Prefer stable string-based numeric compare to avoid Number overflow.
-    if (aDigits && bDigits) {
-      if (a.length !== b.length) return a.length > b.length ? 1 : -1;
-      return a.localeCompare(b);
-    }
-
-    // Fallback: put digit-like seqId ahead of non-digit; otherwise lex compare.
-    if (aDigits !== bDigits) return aDigits ? 1 : -1;
-    return a.localeCompare(b);
-  };
 
   const readUserDataRaw = async (uid: string, type: "char" | "weapon") => {
     const commandRead =
