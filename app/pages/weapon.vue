@@ -66,7 +66,7 @@
           </div>
 
           <div class="flex items-center gap-2">
-            <UBadge variant="outline" color="neutral">
+            <UBadge variant="outline">
               当前已垫：{{ selectedPool.pityCount }} 抽
             </UBadge>
             <UBadge
