@@ -165,7 +165,7 @@
           </UCard>
         </div>
 
-        <UCard>
+        <UCard :ui="{ body: 'p-0 sm:p-0 px-2 sm:px-4' }">
           <template #header>
             <div class="flex items-center justify-between">
               <h3 class="font-semibold">6★ 历史记录</h3>
