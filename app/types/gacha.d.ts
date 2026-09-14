@@ -173,6 +173,8 @@ export interface GachaStatistics {
   paidPulls?: number;
   freePulls?: number;
   pityCount: number;
+  /** 该池开始时的已垫抽数（小保底跨池继承；用于评价建模） */
+  startPity?: number;
   bigPityMax?: number;
   bigPityCount?: number;
   bigPityRemaining?: number;

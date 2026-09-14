@@ -29,8 +29,16 @@ export const resolveWeaponPoolType = (poolId: string): string =>
     ? WEAPON_CONSTANT_POOL_TYPE
     : WEAPON_LIMITED_POOL_TYPE;
 
-const filterStatisticalRecords = <T extends { kind?: string }>(data: T[]): T[] =>
-  data.filter((item) => item.kind !== GIFT_INTEL_BOOK_KIND);
+// 是否携带 kind 字段（角色有，武器没有）
+const hasKindField = (value: object): value is { kind?: string } => 'kind' in value
+
+/**
+ * 剔除不属于抽卡记录的特殊物品（如寻访情报书）
+ *
+ * 用 in 收窄而非泛型约束，以免弱类型检测拒绝没有共同属性的类型。
+ */
+const filterStatisticalRecords = <T extends object>(data: T[]): T[] =>
+  data.filter((item) => !hasKindField(item) || item.kind !== GIFT_INTEL_BOOK_KIND);
 
 export const POOL_NAME_MAP: Record<string, string> = {
   "E_CharacterGachaPoolType_Special": "特许寻访",
@@ -81,12 +89,21 @@ export const analyzePoolData = (poolKey: string, rawData: EndFieldCharInfo[]): G
   let count6 = 0;
   let count5 = 0;
   let count4 = 0;
+  let paidPulls = 0;
+  let freePulls = 0;
+  // 仅付费抽计入保底（加急招募不计入保底计数）
   let pullsSinceLast6 = 0;
 
   const historyRecords: HistoryRecord[] = [];
 
   for (const item of data) {
-    pullsSinceLast6++;
+    const isFree = !!item.isFree;
+    if (isFree) freePulls++;
+    else {
+      paidPulls++;
+      pullsSinceLast6++;
+    }
+
     if (item.rarity === 6) {
       count6++;
       historyRecords.push({
@@ -94,12 +111,13 @@ export const analyzePoolData = (poolKey: string, rawData: EndFieldCharInfo[]): G
         charId: item.charId,
         pity: pullsSinceLast6,
         isNew: item.isNew,
+        isFree,
         gachaTs: item.gachaTs,
         seqId: item.seqId,
         poolId: item.poolId,
         poolName: item.poolName,
       });
-      pullsSinceLast6 = 0;
+      if (!isFree) pullsSinceLast6 = 0;
     } else if (item.rarity === 5) {
       count5++;
     } else if (item.rarity === 4) {
@@ -113,6 +131,8 @@ export const analyzePoolData = (poolKey: string, rawData: EndFieldCharInfo[]): G
     poolType: poolKey,
     poolName: POOL_NAME_MAP[poolKey] || poolKey,
     totalPulls: data.length,
+    paidPulls,
+    freePulls,
     pityCount: pullsSinceLast6,
     count6,
     count5,
@@ -167,6 +187,8 @@ export const analyzeSpecialPoolData = (
       paidPulls: 0,
       freePulls: 0,
       pityCount: 0,
+      // 小保底跨池继承：进入该池时的实时进度
+      startPity: globalSmallPity,
       bigPityMax: SPECIAL_BIG_PITY_MAX,
       bigPityCount: 0,
       bigPityRemaining: SPECIAL_BIG_PITY_MAX,
