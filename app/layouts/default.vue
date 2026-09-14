@@ -16,6 +16,10 @@
             </UButton>
             <AddAccount @success="handleAccountAdded"></AddAccount>
             <SelectAccount v-model="uid"></SelectAccount>
+            <USeparator v-if="isSyncing && syncProgress.poolName" orientation="vertical" class="h-6 mx-2" />
+            <UBadge v-if="isSyncing && syncProgress.poolName" color="neutral" variant="outline">
+              正在获取：{{ syncProgress.poolName }} · 第 {{ syncProgress.page }} 页
+            </UBadge>
           </div>
 
           <div class="flex items-center gap-2">
@@ -35,10 +39,6 @@
                 <span class="tabular-nums">{{ arsenalTicketCostDisplay }}</span>
               </div>
             </UTooltip>
-            <USeparator v-if="isSyncing && syncProgress.poolName" orientation="vertical" class="h-6 mx-2" />
-            <UBadge v-if="isSyncing && syncProgress.poolName" color="neutral" variant="outline">
-              正在获取：{{ syncProgress.poolName }} · 第 {{ syncProgress.page }} 页
-            </UBadge>
           </div>
         </div>
 
