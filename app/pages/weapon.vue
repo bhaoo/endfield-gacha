@@ -47,7 +47,7 @@
       </div>
     </div>
 
-    <div class="min-w-0 flex-1 space-y-4 md:overflow-y-auto md:px-1 pb-0.5">
+    <div class="min-w-0 flex-1 space-y-4 md:overflow-y-auto md:px-1 pb-0.5" :class="mouseInside ? 'scrollbar-hover' : 'scrollbar-hidden'" @mouseenter="onMouseEnter" @mouseleave="onMouseLeave">
       <template v-if="selectedPool">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div class="flex items-center gap-3">
@@ -234,6 +234,10 @@ import { isSystemUid, systemUidLabel, SYSTEM_UID_CN } from '~/utils/systemAccoun
 definePageMeta({
   layout: 'default',
 })
+
+const mouseInside = ref(false);
+const onMouseEnter = () => mouseInside.value = true;
+const onMouseLeave = () =>  mouseInside.value = false;
 
 const PITY_BAR_MAX = 40
 const ALL_POOLS_VALUE = '__all__'
