@@ -13,6 +13,12 @@
     <p class="mt-1 text-sm">切换账号时会读取本地记录，请稍等片刻。</p>
   </div>
 
+  <div v-else-if="pools.length === 0" class="py-16 text-center text-muted">
+    <p class="mb-2 text-4xl">🎴</p>
+    <p class="text-lg font-medium">暂无角色抽卡数据</p>
+    <p class="mt-1 text-sm">请先点击「同步最新数据」获取寻访记录。</p>
+  </div>
+
   <div v-else class="flex flex-col gap-4 md:h-full md:min-h-0 md:flex-row md:overflow-hidden">
     <div
       class="w-full shrink-0 md:w-56 md:pr-1"
