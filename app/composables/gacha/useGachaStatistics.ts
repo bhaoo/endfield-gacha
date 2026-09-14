@@ -44,7 +44,8 @@ export const useGachaStatistics = (params: {
       out.push(analyzePoolData(k, list as any));
     }
 
-    return out;
+    // 无有效抽卡的池（即记录为空）不进行展示
+    return out.filter((s) => s.totalPulls > 0);
   });
 
   const weaponStatistics = computed(() => {
