@@ -53,7 +53,7 @@
       </div>
     </div>
 
-    <div class="min-w-0 flex-1 space-y-4 md:overflow-y-auto md:pl-1 md:pr-2 pb-0.5">
+    <div class="min-w-0 flex-1 space-y-4 md:overflow-y-auto md:pl-1 md:pr-2 pb-0.5" :class="mouseInside ? 'scrollbar-hover' : 'scrollbar-hidden'" @mouseenter="onMouseEnter" @mouseleave="onMouseLeave">
       <template v-if="selectedPool">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div class="flex items-center gap-3">
@@ -259,6 +259,10 @@ import jointPoolImg from '~/assets/images/pool/character_joint.png'
 definePageMeta({
   layout: 'default',
 })
+
+const mouseInside = ref(false);
+const onMouseEnter = () => mouseInside.value = true;
+const onMouseLeave = () =>  mouseInside.value = false;
 
 const SPECIAL_KEY = 'E_CharacterGachaPoolType_Special'
 const STANDARD_KEY = 'E_CharacterGachaPoolType_Standard'
