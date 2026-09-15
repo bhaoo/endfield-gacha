@@ -7,13 +7,6 @@
         <!-- 顶部工具栏 -->
         <div class="flex shrink-0 flex-wrap items-center justify-between gap-2">
           <div class="flex items-center gap-2">
-            <UButton @click="onSyncClick" color="primary" :loading="syncMode === 'latest' && isSyncing" :disabled="isSyncing">
-              {{ isSyncing && syncMode === 'latest' ? '同步中...' : '同步最新数据' }}
-            </UButton>
-            <UButton @click="onFullBackupClick" color="neutral" variant="outline" :loading="syncMode === 'full' && isSyncing"
-              :disabled="isSyncing">
-              {{ isSyncing && syncMode === 'full' ? '同步中...' : '全量同步' }}
-            </UButton>
             <AddAccount @success="handleAccountAdded"></AddAccount>
             <SelectAccount v-model="uid"></SelectAccount>
             <USeparator v-if="isSyncing && syncProgress.poolName" orientation="vertical" class="h-6 mx-2" />
@@ -48,39 +41,6 @@
         </div>
       </UContainer>
     </div>
-
-    <UModal
-      v-model:open="isFullSyncConfirmOpen"
-      title="全量同步"
-    >
-      <template #body>
-        <p class="text-sm text-gray-600 dark:text-gray-400">
-          全量同步会重新拉取当前卡池的全部记录，耗时更长，是否继续？
-          <br/>建议仅在<b>数据异常或需要完整重建</b>时使用该功能。
-        </p>
-      </template>
-
-      <template #footer>
-        <div class="flex w-full justify-end gap-2">
-          <UButton
-            color="neutral"
-            variant="ghost"
-            :disabled="isSyncing"
-            @click="isFullSyncConfirmOpen = false"
-          >
-            取消
-          </UButton>
-          <UButton
-            color="error"
-            :loading="syncMode === 'full' && isSyncing"
-            :disabled="isSyncing"
-            @click="onConfirmFullBackup"
-          >
-            确认全量同步
-          </UButton>
-        </div>
-      </template>
-    </UModal>
   </div>
 </template>
 
@@ -88,14 +48,11 @@
 import { invoke } from '@tauri-apps/api/core';
 import { isSystemUid } from '~/utils/systemAccount'
 
-const { charRecords, weaponRecords, isSyncing, syncProgress, handleSync, loadCharData, loadWeaponData } = useGachaSync();
+const { charRecords, weaponRecords, isSyncing, syncProgress, loadCharData, loadWeaponData } = useGachaSync();
 
 const { loadConfig, currentUser: uid } = useUserStore();
 const { isWindows, detect: detectPlatform } = usePlatform();
 const { checkForUpdate } = useUpdate();
-const route = useRoute()
-const syncMode = ref<'latest' | 'full' | null>(null)
-const isFullSyncConfirmOpen = ref(false)
 const isUserDataLoading = useState<boolean>('gacha-user-data-loading', () => false)
 let userDataLoadSeq = 0
 
@@ -150,10 +107,6 @@ const formatK = (value: number) => {
 
 const oroberylCostDisplay = computed(() => formatK(oroberylCost.value))
 const arsenalTicketCostDisplay = computed(() => formatK(arsenalTicketCost.value))
-
-watch(isSyncing, (v) => {
-  if (!v) syncMode.value = null
-})
 
 const loadAllData = async (uidToLoad: string) => {
   console.log(`正在加载 UID ${uidToLoad} 的所有数据...`);
@@ -210,25 +163,6 @@ onMounted(async () => {
 
   checkForUpdate().catch(console.error);
 });
-const gachaType = computed(() => {
-  return route.path.startsWith('/weapon') ? 'weapon' : 'char'
-})
-const onSyncClick = () => {
-  syncMode.value = 'latest'
-  handleSync(uid.value, gachaType.value);
-}
-
-const onFullBackupClick = () => {
-  if (isSyncing.value) return
-  isFullSyncConfirmOpen.value = true
-}
-
-const onConfirmFullBackup = () => {
-  if (isSyncing.value) return
-  isFullSyncConfirmOpen.value = false
-  syncMode.value = 'full'
-  handleSync(uid.value, gachaType.value, { full: true })
-}
 
 const handleAccountAdded = () => {
   console.log('账号添加成功，全局列表已自动更新');

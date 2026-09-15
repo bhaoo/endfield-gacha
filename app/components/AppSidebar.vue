@@ -29,6 +29,29 @@
     <div class="flex-1" />
 
     <div class="flex flex-col items-center gap-1">
+      <UContextMenu :items="[[{
+        label: '全量同步',
+        onSelect() {
+          onFullBackupClick()
+        },
+      }]]">
+        <UTooltip text="默认增量同步，右键菜单可进入全量同步" placement="right" :content="tooltipContent">
+          <button
+            type="button"
+            class="flex w-14 flex-col items-center gap-1.5 rounded-lg py-2.5 text-muted transition-colors hover:text-highlighted disabled:cursor-not-allowed disabled:hover:text-muted"
+            :disabled="isSyncing"
+            @click="onSyncClick"
+          >
+            <UIcon
+              name="i-lucide-refresh-ccw"
+              class="size-7 transition-transform"
+              :class="{ 'animate-spin': isSyncing }"
+            />
+            <span class="text-xs">同步</span>
+          </button>
+        </UTooltip>
+      </UContextMenu>
+
       <UTooltip :text="isDark ? '切换为亮色模式' : '切换为暗色模式'" placement="right" :content="tooltipContent">
         <button
           type="button"
@@ -55,6 +78,39 @@
         </NuxtLink>
       </UTooltip>
     </div>
+
+    <UModal
+      v-model:open="isFullSyncConfirmOpen"
+      title="全量同步"
+    >
+      <template #body>
+        <p class="text-sm text-gray-600 dark:text-gray-400">
+          全量同步会重新拉取当前卡池的全部记录，耗时更长，是否继续？
+          <br/>建议仅在<b>数据异常或需要完整重建</b>时使用该功能。
+        </p>
+      </template>
+
+      <template #footer>
+        <div class="flex w-full justify-end gap-2">
+          <UButton
+            color="neutral"
+            variant="ghost"
+            :disabled="isSyncing"
+            @click="() => { isFullSyncConfirmOpen = false }"
+          >
+            取消
+          </UButton>
+          <UButton
+            color="error"
+            :loading="syncMode === 'full' && isSyncing"
+            :disabled="isSyncing"
+            @click="onConfirmFullBackup"
+          >
+            确认全量同步
+          </UButton>
+        </div>
+      </template>
+    </UModal>
   </aside>
 </template>
 
@@ -76,5 +132,34 @@ const isActive = (path: string) => {
     return route.path === '/'
   }
   return route.path === path || route.path.startsWith(`${path}/`)
+}
+
+const { isSyncing, handleSync } = useGachaSync()
+const { currentUser: uid } = useUserStore()
+
+const syncMode = ref<'latest' | 'full' | null>(null)
+const isFullSyncConfirmOpen = ref(false)
+
+watch(isSyncing, (v) => {
+  if (!v) syncMode.value = null
+})
+
+const gachaType = computed(() => (route.path.startsWith('/weapon') ? 'weapon' : 'char'))
+
+const onSyncClick = () => {
+  syncMode.value = 'latest'
+  handleSync(uid.value, gachaType.value)
+}
+
+const onFullBackupClick = () => {
+  if (isSyncing.value) return
+  isFullSyncConfirmOpen.value = true
+}
+
+const onConfirmFullBackup = () => {
+  if (isSyncing.value) return
+  isFullSyncConfirmOpen.value = false
+  syncMode.value = 'full'
+  handleSync(uid.value, gachaType.value, { full: true })
 }
 </script>

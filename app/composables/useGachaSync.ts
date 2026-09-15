@@ -13,7 +13,7 @@ import {
 
 export const useGachaSync = () => {
   const toast = useToast();
-  const isSyncing = ref(false);
+  const isSyncing = useState("gacha-is-syncing", () => false);
   const { isWindows, detect: detectPlatform } = usePlatform();
   const { addUser } = useUserStore();
   const { scheduleAutoSync } = useWebDav();
