@@ -21,6 +21,7 @@ export const useGachaPoolInfo = (params: { userAgent: Ref<string> }) => {
       return null;
     }
     const up6Ids = toUp6IdList(value.up6_ids);
+    const versionNum = String(value.version_num ?? "").trim();
 
     return {
       pool_id: value.pool_id,
@@ -29,6 +30,7 @@ export const useGachaPoolInfo = (params: { userAgent: Ref<string> }) => {
       pool_type: String(value.pool_type || ""),
       up6_id: String(value.up6_id || "").trim(),
       up6_ids: up6Ids.length > 0 ? up6Ids : undefined,
+      version_num: versionNum || undefined,
     };
   };
 
@@ -117,6 +119,7 @@ export const useGachaPoolInfo = (params: { userAgent: Ref<string> }) => {
 
       const up6Ids = getCharPoolUp6Ids(pool);
       const isMultiUp = up6Ids.length > 1;
+      const versionNum = String(pool.version_num ?? "").trim();
 
       const entry: PoolInfoEntry = {
         pool_id: poolId,
@@ -125,6 +128,7 @@ export const useGachaPoolInfo = (params: { userAgent: Ref<string> }) => {
         pool_type: String(pool.pool_type || ""),
         up6_id: isMultiUp ? "" : up6Ids[0] || "",
         up6_ids: isMultiUp ? up6Ids : undefined,
+        version_num: versionNum || undefined,
       };
       return entry;
     } catch (e) {

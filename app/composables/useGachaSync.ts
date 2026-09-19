@@ -344,6 +344,7 @@ export const useGachaSync = () => {
     weaponRecords,
     charStatistics,
     weaponStatistics,
+    poolInfoById,
     isSyncing,
     syncProgress,
     handleSync,

@@ -106,6 +106,7 @@ const NEWBIE_MODEL = buildModel(CHAR_NEWBIE_HARD_PITY, null)
 /** 池类型 → 概率模型 */
 const MODEL_BY_POOL_TYPE: Record<string, PoolModel> = {
   E_CharacterGachaPoolType_Special: SPECIAL_MODEL,
+  E_CharacterGachaPoolType_Rerun: SPECIAL_MODEL,
   E_CharacterGachaPoolType_Standard: STANDARD_MODEL,
   E_CharacterGachaPoolType_Joint: STANDARD_MODEL,
   E_CharacterGachaPoolType_Beginner: NEWBIE_MODEL,

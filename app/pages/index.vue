@@ -63,9 +63,8 @@
       <template v-if="selectedPool">
         <div class="flex flex-wrap items-center justify-between gap-3">
           <div class="flex items-center gap-3">
-            <!-- 特许寻访：子卡池下拉选择 -->
             <USelect
-              v-if="isSpecialType && poolOptions.length > 0"
+              v-if="isSubPoolType && poolOptions.length > 0"
               v-model="selectedPoolKey"
               :items="poolOptions"
               size="md"
@@ -84,7 +83,7 @@
             </UBadge>
             <UBadge
               v-if="
-                !isAllSpecialSelected &&
+                !isAllSubPoolsSelected &&
                 selectedPool.bigPityRemaining !== undefined &&
                 selectedPool.bigPityMax !== undefined
               "
@@ -265,7 +264,7 @@
 
               <div class="w-24 md:w-36 min-w-0 shrink-0">
                 <p class="truncate text-sm font-medium">{{ rec.name }}</p>
-                <p v-if="isAllSpecialSelected && rec.poolName" class="truncate text-xs text-muted">
+                <p v-if="isAllSubPoolsSelected && rec.poolName" class="truncate text-xs text-muted">
                   {{ rec.poolName }}
                 </p>
               </div>
@@ -323,6 +322,7 @@ import type { GachaStatistics, HistoryRecord } from '~/types/gacha'
 import { sortHistory6Desc } from '~/utils/historySort'
 import { isSystemUid, systemUidLabel, SYSTEM_UID_CN } from '~/utils/systemAccount'
 import { ratePool, ratePoolAggregate } from '~/utils/gachaRating'
+import { POOL_NAME_MAP } from '~/utils/gachaCalc'
 import specialPoolImg from '~/assets/images/pool/character_special.png'
 import standardPoolImg from '~/assets/images/pool/character_standard.png'
 import beginnerPoolImg from '~/assets/images/pool/character_beginner.png'
@@ -337,10 +337,12 @@ const onMouseEnter = () => mouseInside.value = true;
 const onMouseLeave = () =>  mouseInside.value = false;
 
 const SPECIAL_KEY = 'E_CharacterGachaPoolType_Special'
+const RERUN_KEY = 'E_CharacterGachaPoolType_Rerun'
 const STANDARD_KEY = 'E_CharacterGachaPoolType_Standard'
 const BEGINNER_KEY = 'E_CharacterGachaPoolType_Beginner'
 const JOINT_KEY = 'E_CharacterGachaPoolType_Joint'
 
+const SUB_POOL_TYPES: readonly string[] = [SPECIAL_KEY, RERUN_KEY]
 
 const POOL_IMAGE_MAP: Record<string, string> = {
   [SPECIAL_KEY]: specialPoolImg,
@@ -365,20 +367,18 @@ const AVATAR_MAP: Record<string, string> = Object.fromEntries(
 
 const charAvatar = (rec: HistoryRecord) => (rec.charId ? AVATAR_MAP[rec.charId] || '' : '')
 
-const { charStatistics } = useGachaSync()
+const { charStatistics, poolInfoById } = useGachaSync()
 const { currentUser: uid } = useUserStore()
 const isUserDataLoading = useState<boolean>('gacha-user-data-loading', () => false)
 const isSystem = computed(() => isSystemUid(uid.value))
 const systemLabel = computed(() => systemUidLabel(uid.value || SYSTEM_UID_CN))
 
-// 特许寻访
-const specialSubPools = computed<GachaStatistics[]>(() =>
-  (charStatistics.value || []).filter((s) => s.poolType === SPECIAL_KEY),
+const subPoolStats = computed<GachaStatistics[]>(() =>
+  (charStatistics.value || []).filter((s) => SUB_POOL_TYPES.includes(s.poolType || '')),
 )
 
-// 非特许寻访（基础/启程）
 const singlePools = computed<GachaStatistics[]>(() =>
-  (charStatistics.value || []).filter((s) => s.poolType !== SPECIAL_KEY),
+  (charStatistics.value || []).filter((s) => !SUB_POOL_TYPES.includes(s.poolType || '')),
 )
 
 // 跨子池聚合
@@ -411,48 +411,61 @@ const aggregatePools = (
 // 卡池类型列表
 const pools = computed<GachaStatistics[]>(() => {
   const list: GachaStatistics[] = []
-  if (specialSubPools.value.length > 0) {
-    list.push(aggregatePools(specialSubPools.value, SPECIAL_KEY, '特许寻访'))
+  for (const poolType of SUB_POOL_TYPES) {
+    const sub = subPoolStats.value.filter((s) => s.poolType === poolType)
+    if (sub.length > 0) {
+      list.push(aggregatePools(sub, poolType, POOL_NAME_MAP[poolType] || poolType))
+    }
   }
   list.push(...singlePools.value)
   return list
 })
 
-// 特许寻访：子卡池选项（第一项为「全部卡池」聚合视图）
-const ALL_SPECIAL_VALUE = '__all__'
+// 子卡池选项：全部卡池
+const ALL_SUB_POOLS_VALUE = '__all__'
 
 const poolOptions = computed(() => {
-  if (specialSubPools.value.length <= 0) return []
+  const sub = subPoolStats.value.filter((s) => s.poolType === selectedTypeKey.value)
+  if (sub.length <= 0) return []
   return [
-    { label: '全部卡池', value: ALL_SPECIAL_VALUE },
-    ...specialSubPools.value.map((s) => ({
-      label: s.poolName,
+    { label: '全部卡池', value: ALL_SUB_POOLS_VALUE },
+    ...sub.map((s) => ({
+      label: subPoolLabel(s),
       value: s.poolId as string,
     })),
   ]
 })
 
-// 「全部卡池」聚合视图（无子池时返回 undefined 走空态）
-const allSpecialStat = computed<GachaStatistics | undefined>(() => {
-  if (specialSubPools.value.length <= 0) return undefined
-  return aggregatePools(specialSubPools.value, SPECIAL_KEY, '全部卡池')
+// 重构寻访卡池名带版本后缀（如「河流的女儿#2」），版本号取自 poolInfo
+const subPoolLabel = (s: GachaStatistics) => {
+  const versionNum = poolInfoById.value[s.poolId || '']?.version_num
+  return versionNum ? `${s.poolName}#${versionNum}` : s.poolName
+}
+
+// 当前类型下「全部卡池」的聚合视图
+const allSubPoolsStat = computed<GachaStatistics | undefined>(() => {
+  const sub = subPoolStats.value.filter((s) => s.poolType === selectedTypeKey.value)
+  if (sub.length <= 0) return undefined
+  return aggregatePools(sub, selectedTypeKey.value, '全部卡池')
 })
 
-const selectedPoolKey = ref<string>(ALL_SPECIAL_VALUE)
+const selectedPoolKey = ref<string>(ALL_SUB_POOLS_VALUE)
 const selectedTypeKey = ref<string>(SPECIAL_KEY)
 
-const isSpecialType = computed(() => selectedTypeKey.value === SPECIAL_KEY)
+// 当前类型是否为多卡池类型
+const isSubPoolType = computed(() => SUB_POOL_TYPES.includes(selectedTypeKey.value))
 
-const isAllSpecialSelected = computed(
-  () => isSpecialType.value && selectedPoolKey.value === ALL_SPECIAL_VALUE,
+const isAllSubPoolsSelected = computed(
+  () => isSubPoolType.value && selectedPoolKey.value === ALL_SUB_POOLS_VALUE,
 )
 
 const selectedPool = computed<GachaStatistics | undefined>(() => {
-  if (isSpecialType.value) {
-    if (selectedPoolKey.value === ALL_SPECIAL_VALUE) return allSpecialStat.value
+  if (isSubPoolType.value) {
+    if (selectedPoolKey.value === ALL_SUB_POOLS_VALUE) return allSubPoolsStat.value
+    const sub = subPoolStats.value.filter((s) => s.poolType === selectedTypeKey.value)
     return (
-      specialSubPools.value.find((s) => s.poolId === selectedPoolKey.value) ||
-      allSpecialStat.value
+      sub.find((s) => s.poolId === selectedPoolKey.value) ||
+      allSubPoolsStat.value
     )
   }
   return pools.value.find((p) => p.poolType === selectedTypeKey.value)
@@ -460,12 +473,12 @@ const selectedPool = computed<GachaStatistics | undefined>(() => {
 
 const poolImage = (pool: GachaStatistics) => POOL_IMAGE_MAP[pool.poolType || ''] || ''
 
-// 切换卡池类型：仅特许寻访有子池，其余类型直接展示
+// 切换卡池类型：多卡池类型重置为「全部卡池」视图
 const selectType = (poolType?: string) => {
   if (!poolType) return
   selectedTypeKey.value = poolType
-  if (poolType === SPECIAL_KEY) {
-    selectedPoolKey.value = ALL_SPECIAL_VALUE
+  if (SUB_POOL_TYPES.includes(poolType)) {
+    selectedPoolKey.value = ALL_SUB_POOLS_VALUE
   }
 }
 
@@ -474,11 +487,13 @@ const history6 = computed(() => selectedPool.value?.history6 || [])
 /**
  * 当前卡池的寻访评价
  *
- * 「全部卡池」为多个子池的聚合视图，各子池大保底计数独立，逐池建模后卷积。
+ * 「全部卡池」为多个子池的聚合视图，各子池大保底计数相互独立，逐池建模后卷积。
  */
 const rating = computed(() => {
-  if (isAllSpecialSelected.value) {
-    return ratePoolAggregate(specialSubPools.value)
+  if (isAllSubPoolsSelected.value) {
+    return ratePoolAggregate(
+      subPoolStats.value.filter((s) => s.poolType === selectedTypeKey.value),
+    )
   }
   const pool = selectedPool.value
   return pool ? ratePool(pool) : null

@@ -7,8 +7,10 @@ import type {
 } from "~/types/gacha";
 import {
   JOINT_POOL_KEY,
+  RERUN_POOL_KEY,
   analyzePoolData,
   analyzeJointPoolData,
+  analyzeRerunPoolData,
   analyzeSpecialPoolData,
   analyzeWeaponPoolData,
   POOL_TYPES,
@@ -33,6 +35,8 @@ export const useGachaStatistics = (params: {
 
       if (poolType === SPECIAL_POOL_KEY) {
         out.push(...analyzeSpecialPoolData(list, params.poolInfoById.value));
+      } else if (poolType === RERUN_POOL_KEY) {
+        out.push(...analyzeRerunPoolData(list, params.poolInfoById.value));
       } else if (poolType === JOINT_POOL_KEY) {
         out.push(...analyzeJointPoolData(list, params.poolInfoById.value));
       } else out.push(analyzePoolData(poolType, list));

@@ -2,6 +2,7 @@ import type { EndFieldCharInfo, GachaStatistics, HistoryRecord, EndFieldWeaponIn
 
 export const POOL_TYPES = [
   "E_CharacterGachaPoolType_Special",
+  "E_CharacterGachaPoolType_Rerun",
   "E_CharacterGachaPoolType_Joint",
   "E_CharacterGachaPoolType_Standard",
   "E_CharacterGachaPoolType_Beginner",
@@ -9,8 +10,10 @@ export const POOL_TYPES = [
 
 export const SPECIAL_POOL_KEY = "E_CharacterGachaPoolType_Special" as const;
 export const JOINT_POOL_KEY = "E_CharacterGachaPoolType_Joint" as const;
+export const RERUN_POOL_KEY = "E_CharacterGachaPoolType_Rerun" as const;
 export const POOL_INFO_CHAR_POOL_KEYS = [
   SPECIAL_POOL_KEY,
+  RERUN_POOL_KEY,
   JOINT_POOL_KEY,
 ] as const;
 const SPECIAL_BIG_PITY_MAX = 120;
@@ -42,6 +45,7 @@ const filterStatisticalRecords = <T extends object>(data: T[]): T[] =>
 
 export const POOL_NAME_MAP: Record<string, string> = {
   "E_CharacterGachaPoolType_Special": "特许寻访",
+  "E_CharacterGachaPoolType_Rerun": "重构寻访",
   "E_CharacterGachaPoolType_Joint": "辉光庆典",
   "E_CharacterGachaPoolType_Standard": "基础寻访",
   "E_CharacterGachaPoolType_Beginner": "启程寻访"
@@ -258,7 +262,140 @@ export const analyzeSpecialPoolData = (
   return results.reverse();
 };
 
-// 特殊寻访无小保底/大保底
+/**
+ * 重构寻访
+ *
+ * - 80 抽 6★ 保底在所有「重构寻访」卡池共享
+ * - 120 抽 UP 6★ 大保底仅当前「{{pool_name}}」重构寻访中继承（即同名卡池）
+ */
+export const analyzeRerunPoolData = (
+  rawData: EndFieldCharInfo[],
+  poolInfoById: Record<
+    string,
+    { pool_name?: string; up6_id?: string }
+  > = {},
+): GachaStatistics[] => {
+  const data = filterStatisticalRecords(rawData).reverse();
+
+  let globalSmallPity = 0;
+
+  const byPoolName = new Map<string, GachaStatistics>();
+  const poolIdsByName = new Map<string, string[]>();
+  const results: GachaStatistics[] = [];
+  let latestPoolName = "";
+
+  const resolvePoolName = (item: EndFieldCharInfo): string =>
+    String(item.poolName || "").trim() ||
+    String(poolInfoById[item.poolId]?.pool_name || "").trim() ||
+    String(item.poolId || "").trim() ||
+    POOL_NAME_MAP[RERUN_POOL_KEY] ||
+    RERUN_POOL_KEY;
+
+  for (const item of data) {
+    const poolName = resolvePoolName(item);
+
+    let current = byPoolName.get(poolName);
+    if (!current) {
+      current = {
+        poolType: RERUN_POOL_KEY,
+        // 合并后仅保留最近版本的 poolId，供 UI 作为唯一标识使用
+        poolId: item.poolId,
+        poolName,
+        isCurrentPool: false,
+        totalPulls: 0,
+        paidPulls: 0,
+        freePulls: 0,
+        pityCount: 0,
+        // 小保底跨池继承：进入该池时的实时进度
+        startPity: globalSmallPity,
+        bigPityMax: SPECIAL_BIG_PITY_MAX,
+        bigPityCount: 0,
+        bigPityRemaining: SPECIAL_BIG_PITY_MAX,
+        gotUp6: false,
+        count6: 0,
+        count5: 0,
+        count4: 0,
+        history6: [] as HistoryRecord[],
+      };
+      byPoolName.set(poolName, current);
+      poolIdsByName.set(poolName, []);
+      results.push(current);
+    }
+
+    const poolId = String(item.poolId || "").trim();
+    if (poolId) {
+      const versionIds = poolIdsByName.get(poolName)!;
+      if (!versionIds.includes(poolId)) versionIds.push(poolId);
+      current.poolId = poolId;
+    }
+
+    current.totalPulls++;
+
+    const isFree = !!item.isFree;
+    if (isFree) {
+      current.freePulls = (current.freePulls || 0) + 1;
+    } else {
+      current.paidPulls = (current.paidPulls || 0) + 1;
+      globalSmallPity++;
+    }
+
+    if (item.rarity === 6) {
+      current.count6++;
+      current.history6.push({
+        name: item.charName,
+        charId: item.charId,
+        pity: globalSmallPity,
+        isNew: item.isNew,
+        isFree,
+        poolId: item.poolId,
+        poolName,
+        gachaTs: item.gachaTs,
+        seqId: item.seqId,
+      });
+
+      if (!isFree) globalSmallPity = 0;
+    } else if (item.rarity === 5) {
+      current.count5++;
+    } else if (item.rarity === 4) {
+      current.count4++;
+    }
+
+    current.pityCount = globalSmallPity;
+    latestPoolName = poolName;
+  }
+
+  for (const stat of results) {
+    const versionIds = poolIdsByName.get(stat.poolName) || [];
+
+    // 同名卡池共享同一个 UP 干员
+    let up6Id = "";
+    for (const poolId of versionIds) {
+      up6Id = String(poolInfoById[poolId]?.up6_id || "").trim();
+      if (up6Id) break;
+    }
+    stat.up6Id = up6Id || undefined;
+
+    for (const rec of stat.history6) {
+      rec.up6Id = stat.up6Id;
+      rec.isUp = !!stat.up6Id && rec.charId === stat.up6Id;
+      if (rec.isUp) stat.gotUp6 = true;
+    }
+
+    stat.bigPityCount = stat.paidPulls || 0;
+    stat.bigPityRemaining = stat.gotUp6
+      ? 0
+      : Math.max(0, SPECIAL_BIG_PITY_MAX - (stat.paidPulls || 0));
+    stat.history6.reverse();
+  }
+
+  // 最后一条寻访记录所属的即为当前池
+  const latest = byPoolName.get(latestPoolName);
+  if (latest) latest.isCurrentPool = true;
+
+  return results.reverse();
+};
+
+// 辉光庆典类型无小保底/大保底
 export const analyzeJointPoolData = (
   rawData: EndFieldCharInfo[],
   poolInfoById: Record<

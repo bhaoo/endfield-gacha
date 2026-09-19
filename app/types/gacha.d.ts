@@ -205,4 +205,6 @@ export interface PoolInfoEntry {
   pool_type: string;
   up6_id: string;
   up6_ids?: string[];
+  /** 重构寻访的卡池版本号（#1 / #2 / #3），仅该类卡池有值 */
+  version_num?: string;
 }
