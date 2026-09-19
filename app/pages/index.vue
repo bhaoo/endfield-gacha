@@ -322,7 +322,7 @@ import type { GachaStatistics, HistoryRecord } from '~/types/gacha'
 import { sortHistory6Desc } from '~/utils/historySort'
 import { isSystemUid, systemUidLabel, SYSTEM_UID_CN } from '~/utils/systemAccount'
 import { ratePool, ratePoolAggregate } from '~/utils/gachaRating'
-import { POOL_NAME_MAP } from '~/utils/gachaCalc'
+import { POOL_NAME_MAP, SPECIAL_POOL_KEY, RERUN_POOL_KEY, JOINT_POOL_KEY, STANDARD_POOL_KEY, BEGINNER_POOL_KEY } from '~/utils/gachaCalc'
 import specialPoolImg from '~/assets/images/pool/character_special.png'
 import standardPoolImg from '~/assets/images/pool/character_standard.png'
 import beginnerPoolImg from '~/assets/images/pool/character_beginner.png'
@@ -336,19 +336,13 @@ const mouseInside = ref(false);
 const onMouseEnter = () => mouseInside.value = true;
 const onMouseLeave = () =>  mouseInside.value = false;
 
-const SPECIAL_KEY = 'E_CharacterGachaPoolType_Special'
-const RERUN_KEY = 'E_CharacterGachaPoolType_Rerun'
-const STANDARD_KEY = 'E_CharacterGachaPoolType_Standard'
-const BEGINNER_KEY = 'E_CharacterGachaPoolType_Beginner'
-const JOINT_KEY = 'E_CharacterGachaPoolType_Joint'
-
-const SUB_POOL_TYPES: readonly string[] = [SPECIAL_KEY, RERUN_KEY]
+const SUB_POOL_TYPES: readonly string[] = [SPECIAL_POOL_KEY, RERUN_POOL_KEY]
 
 const POOL_IMAGE_MAP: Record<string, string> = {
-  [SPECIAL_KEY]: specialPoolImg,
-  [STANDARD_KEY]: standardPoolImg,
-  [BEGINNER_KEY]: beginnerPoolImg,
-  [JOINT_KEY]: jointPoolImg
+  [SPECIAL_POOL_KEY]: specialPoolImg,
+  [STANDARD_POOL_KEY]: standardPoolImg,
+  [BEGINNER_POOL_KEY]: beginnerPoolImg,
+  [JOINT_POOL_KEY]: jointPoolImg
 }
 
 // 角色头像预加载
@@ -450,7 +444,7 @@ const allSubPoolsStat = computed<GachaStatistics | undefined>(() => {
 })
 
 const selectedPoolKey = ref<string>(ALL_SUB_POOLS_VALUE)
-const selectedTypeKey = ref<string>(SPECIAL_KEY)
+const selectedTypeKey = ref<string>(SPECIAL_POOL_KEY)
 
 // 当前类型是否为多卡池类型
 const isSubPoolType = computed(() => SUB_POOL_TYPES.includes(selectedTypeKey.value))

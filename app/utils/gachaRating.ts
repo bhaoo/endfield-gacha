@@ -17,6 +17,13 @@
  */
 
 import type { GachaStatistics, HistoryRecord } from '~/types/gacha'
+import {
+  BEGINNER_POOL_KEY,
+  JOINT_POOL_KEY,
+  RERUN_POOL_KEY,
+  SPECIAL_POOL_KEY,
+  STANDARD_POOL_KEY,
+} from '~/utils/gachaCalc'
 
 /** 6★ 基础概率 */
 const CHAR_RATE_6 = 0.008
@@ -105,11 +112,12 @@ const NEWBIE_MODEL = buildModel(CHAR_NEWBIE_HARD_PITY, null)
 
 /** 池类型 → 概率模型 */
 const MODEL_BY_POOL_TYPE: Record<string, PoolModel> = {
-  E_CharacterGachaPoolType_Special: SPECIAL_MODEL,
-  E_CharacterGachaPoolType_Rerun: SPECIAL_MODEL,
-  E_CharacterGachaPoolType_Standard: STANDARD_MODEL,
-  E_CharacterGachaPoolType_Joint: STANDARD_MODEL,
-  E_CharacterGachaPoolType_Beginner: NEWBIE_MODEL,
+  [SPECIAL_POOL_KEY]: SPECIAL_MODEL,
+  // 重构寻访与特许寻访同参数：80 硬保底、65 抽后概率提升、120 抽大保底、50% UP
+  [RERUN_POOL_KEY]: SPECIAL_MODEL,
+  [STANDARD_POOL_KEY]: STANDARD_MODEL,
+  [JOINT_POOL_KEY]: STANDARD_MODEL,
+  [BEGINNER_POOL_KEY]: NEWBIE_MODEL,
 }
 
 /** 离散卷积：`c[k] = Σ a[i]·b[k-i]` */

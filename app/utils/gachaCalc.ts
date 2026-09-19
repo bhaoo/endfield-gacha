@@ -1,16 +1,19 @@
 import type { EndFieldCharInfo, GachaStatistics, HistoryRecord, EndFieldWeaponInfo, EndfieldGachaParams } from '~/types/gacha'
 
+export const SPECIAL_POOL_KEY = "E_CharacterGachaPoolType_Special" as const;
+export const RERUN_POOL_KEY = "E_CharacterGachaPoolType_Rerun" as const;
+export const JOINT_POOL_KEY = "E_CharacterGachaPoolType_Joint" as const;
+export const STANDARD_POOL_KEY = "E_CharacterGachaPoolType_Standard" as const;
+export const BEGINNER_POOL_KEY = "E_CharacterGachaPoolType_Beginner" as const;
+
 export const POOL_TYPES = [
-  "E_CharacterGachaPoolType_Special",
-  "E_CharacterGachaPoolType_Rerun",
-  "E_CharacterGachaPoolType_Joint",
-  "E_CharacterGachaPoolType_Standard",
-  "E_CharacterGachaPoolType_Beginner",
+  SPECIAL_POOL_KEY,
+  RERUN_POOL_KEY,
+  JOINT_POOL_KEY,
+  STANDARD_POOL_KEY,
+  BEGINNER_POOL_KEY,
 ] as const;
 
-export const SPECIAL_POOL_KEY = "E_CharacterGachaPoolType_Special" as const;
-export const JOINT_POOL_KEY = "E_CharacterGachaPoolType_Joint" as const;
-export const RERUN_POOL_KEY = "E_CharacterGachaPoolType_Rerun" as const;
 export const POOL_INFO_CHAR_POOL_KEYS = [
   SPECIAL_POOL_KEY,
   RERUN_POOL_KEY,
@@ -44,11 +47,11 @@ const filterStatisticalRecords = <T extends object>(data: T[]): T[] =>
   data.filter((item) => !hasKindField(item) || item.kind !== GIFT_INTEL_BOOK_KIND);
 
 export const POOL_NAME_MAP: Record<string, string> = {
-  "E_CharacterGachaPoolType_Special": "特许寻访",
-  "E_CharacterGachaPoolType_Rerun": "重构寻访",
-  "E_CharacterGachaPoolType_Joint": "辉光庆典",
-  "E_CharacterGachaPoolType_Standard": "基础寻访",
-  "E_CharacterGachaPoolType_Beginner": "启程寻访"
+  [SPECIAL_POOL_KEY]: "特许寻访",
+  [RERUN_POOL_KEY]: "重构寻访",
+  [JOINT_POOL_KEY]: "辉光庆典",
+  [STANDARD_POOL_KEY]: "基础寻访",
+  [BEGINNER_POOL_KEY]: "启程寻访",
 };
 
 export const toUp6IdList = (value: unknown): string[] => {
