@@ -235,6 +235,52 @@ export const createGachaApi = (deps: {
     };
   };
 
+  const readTabPoolType = (tab: unknown): string => {
+    if (!tab || typeof tab !== "object" || !("poolType" in tab)) return "";
+    const value = tab.poolType;
+    return typeof value === "string" ? value.trim() : "";
+  };
+
+  const fetchCharPoolTypes = async (
+    u8_token: string,
+    provider: "hypergryph" | "gryphline",
+    serverId: string,
+    lang: string,
+  ): Promise<string[]> => {
+    const query = new URLSearchParams({
+      lang,
+      token: u8_token,
+      server_id: serverId,
+    });
+    const response = await fetch(
+      `https://ef-webview.${provider}.com/api/record/char/meta?${query.toString()}`,
+      {
+        method: "GET",
+        headers: { "User-Agent": deps.userAgent.value },
+      },
+    );
+    if (!response.ok) {
+      throw new Error(`[fetchCharPoolTypes] Network response was not ok (${response.status})`);
+    }
+
+    const json = await response.json();
+    if (json.code !== 0 || !json.data) {
+      throw new Error(
+        `[fetchCharPoolTypes] API response invalid: code=${String(json.code)} msg=${String(json.msg || "")}`,
+      );
+    }
+
+    const tabs = json.data.tabs;
+    if (!Array.isArray(tabs)) return [];
+
+    const poolTypes: string[] = [];
+    for (const tab of tabs) {
+      const poolType = readTabPoolType(tab);
+      if (poolType && !poolTypes.includes(poolType)) poolTypes.push(poolType);
+    }
+    return poolTypes;
+  };
+
   const getSyncStatus = (
     poolResults: { failed: boolean; successfulPages: number }[],
   ): SyncStatus => {
@@ -262,7 +308,16 @@ export const createGachaApi = (deps: {
       failureReason?: string;
     }[] = [];
 
-    for (const poolType of POOL_TYPES) {
+    let poolTypes: string[];
+    try {
+      poolTypes = await fetchCharPoolTypes(u8_token, provider, serverId, lang);
+    } catch (error) {
+      // meta 不可用时 fallback 到内置卡池类型
+      console.error("[fetchCharPoolTypes] 获取卡池列表失败，回退到内置卡池类型:", error);
+      poolTypes = [...POOL_TYPES];
+    }
+
+    for (const poolType of poolTypes) {
       const poolName = POOL_NAME_MAP[poolType] || poolType;
       const result = await fetchPaginatedData<EndFieldCharInfo>(
         u8_token,
