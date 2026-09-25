@@ -1,6 +1,12 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Ref } from "vue";
-import type { EndFieldCharInfo, EndFieldWeaponInfo, GachaItem } from "~/types/gacha";
+import type {
+  EndFieldCharInfo,
+  EndFieldWeaponInfo,
+  GachaItem,
+  RerunCountMap,
+} from "~/types/gacha";
+import { mergeRerunCountMap, normalizeRerunCountMap } from "~/utils/gachaCalc";
 import { compareSeqId } from "~/utils/seqId";
 
 export const useGachaRecords = (params?: {
@@ -24,6 +30,48 @@ export const useGachaRecords = (params?: {
     } catch (e) {
       console.error(e);
       return {};
+    }
+  };
+
+  const readRerunCounts = async (uid: string) => {
+    try {
+      const res = await invoke<Record<string, unknown>>("read_rerun_records", { uid });
+      if (params?.currentUid && params.currentUid.value !== uid) return;
+      charRerunInfo.value = normalizeRerunCountMap(res?.character_rerun_info);
+      weaponRerunInfo.value = normalizeRerunCountMap(res?.weapon_rerun_info);
+    } catch (e) {
+      console.error("[rerunInfo] read_rerun_records failed", e);
+      if (params?.currentUid && params.currentUid.value !== uid) return;
+      charRerunInfo.value = {};
+      weaponRerunInfo.value = {};
+    }
+  };
+
+  const saveRerunCounts = async (
+    uid: string,
+    type: "char" | "weapon",
+    counts: RerunCountMap,
+  ) => {
+    if (!uid || !counts) return;
+
+    // 若无累计次数时无需读写，直接跳过
+    const incoming = normalizeRerunCountMap(counts);
+    if (Object.keys(incoming).length === 0) return;
+
+    const field = type === "char" ? "character_rerun_info" : "weapon_rerun_info";
+    try {
+      const existing = await invoke<Record<string, unknown>>("read_rerun_records", { uid });
+      const merged = mergeRerunCountMap(
+        normalizeRerunCountMap(existing?.[field]),
+        incoming,
+      );
+      await invoke("save_rerun_records", { uid, data: { [field]: merged } });
+
+      if (params?.currentUid && params.currentUid.value !== uid) return;
+      if (type === "char") charRerunInfo.value = merged;
+      else weaponRerunInfo.value = merged;
+    } catch (e) {
+      console.error("[rerunInfo] save_rerun_records failed", e);
     }
   };
 

@@ -24,16 +24,20 @@ export const GIFT_INTEL_BOOK_KIND = "gift_intel_book";
 
 export const WEAPON_LIMITED_POOL_TYPE = "special" as const;
 export const WEAPON_CONSTANT_POOL_TYPE = "constant" as const;
+export const WEAPON_RERUN_POOL_TYPE = "rerun" as const;
 export const WEAPON_POOL_TYPE_LABELS: Record<string, string> = {
   [WEAPON_LIMITED_POOL_TYPE]: "限定武器池",
   [WEAPON_CONSTANT_POOL_TYPE]: "非限定武器池",
 };
 
-// 常驻申领池的 poolId 带 constant 段（如 weaponbox_constant_2）：含 constant 即非限定，否则限定
-export const resolveWeaponPoolType = (poolId: string): string =>
-  String(poolId || "").toLowerCase().includes(WEAPON_CONSTANT_POOL_TYPE)
-    ? WEAPON_CONSTANT_POOL_TYPE
-    : WEAPON_LIMITED_POOL_TYPE;
+// 限定申领池的 poolId 形如 weponbox_1_0_1，重构申领池形如 rerun_wpn_yvonne；
+// 常驻申领池带 constant 段（如 weaponbox_constant_2）
+export const resolveWeaponPoolType = (poolId: string): string => {
+  const value = String(poolId || "").toLowerCase();
+  if (value.includes(WEAPON_CONSTANT_POOL_TYPE)) return WEAPON_CONSTANT_POOL_TYPE;
+  if (value.startsWith("rerun") || value.includes("rerun_")) return WEAPON_RERUN_POOL_TYPE;
+  return WEAPON_LIMITED_POOL_TYPE;
+};
 
 // 是否携带 kind 字段（角色有，武器没有）
 const hasKindField = (value: object): value is { kind?: string } => 'kind' in value
@@ -71,6 +75,46 @@ export const getPoolInfoUp6Ids = (info?: {
 }): string[] => {
   const up6Ids = toUp6IdList(info?.up6_ids);
   return up6Ids.length > 0 ? up6Ids : toUp6IdList(info?.up6_id);
+};
+
+/** poolId → 累计次数 映射 */
+export const toRerunCountMap = (entries: unknown): RerunCountMap => {
+  const map: RerunCountMap = {};
+  if (!Array.isArray(entries)) return map;
+
+  for (const item of entries) {
+    const entry = normalizeRerunCountEntry(item);
+    if (!entry) continue;
+    map[entry.poolId] = Math.max(map[entry.poolId] || 0, entry.totalPullCount);
+  }
+  return map;
+};
+
+/** 丢弃非数字、负数与非法 poolId */
+export const normalizeRerunCountMap = (value: unknown): RerunCountMap => {
+  const map: RerunCountMap = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return map;
+
+  for (const [poolId, count] of Object.entries(value as Record<string, unknown>)) {
+    const key = String(poolId || "").trim();
+    if (!key) continue;
+    const num = Number(count);
+    if (!Number.isFinite(num) || num < 0) continue;
+    map[key] = Math.floor(num);
+  }
+  return map;
+};
+
+/** 合并累计次数（按 poolId 取较大数） */
+export const mergeRerunCountMap = (
+  local: RerunCountMap | undefined,
+  incoming: RerunCountMap | undefined,
+): RerunCountMap => {
+  const merged: RerunCountMap = { ...normalizeRerunCountMap(local) };
+  for (const [poolId, count] of Object.entries(normalizeRerunCountMap(incoming))) {
+    merged[poolId] = Math.max(merged[poolId] || 0, count);
+  }
+  return merged;
 };
 
 export const parseGachaParams = (uri: string): EndfieldGachaParams | null => {

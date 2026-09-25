@@ -808,6 +808,60 @@ fn save_pool_info(data: serde_json::Value) -> Result<String, String> {
 }
 
 #[command]
+fn read_rerun_records(uid: String) -> Result<serde_json::Value, String> {
+    if uid.trim().is_empty() {
+        return Err("UID cannot be empty".into());
+    }
+
+    let full_data = load_full_record(&uid)?;
+    let pick = |key: &str| -> serde_json::Value {
+        match full_data.get(key) {
+            Some(serde_json::Value::Object(obj)) => serde_json::Value::Object(obj.clone()),
+            _ => serde_json::json!({}),
+        }
+    };
+
+    Ok(serde_json::json!({
+        "character_rerun_info": pick("character_rerun_info"),
+        "weapon_rerun_info": pick("weapon_rerun_info")
+    }))
+}
+
+#[command]
+fn save_rerun_records(uid: String, data: serde_json::Value) -> Result<String, String> {
+    if uid.trim().is_empty() {
+        return Err("UID cannot be empty".into());
+    }
+
+    let Some(incoming) = data.as_object() else {
+        return Err("data must be a JSON object".into());
+    };
+
+    let mut full_data = load_full_record(&uid)?;
+    let mut updated = 0usize;
+
+    for key in ["character_rerun_info", "weapon_rerun_info"] {
+        let Some(value) = incoming.get(key) else {
+            continue;
+        };
+        if !value.is_object() {
+            return Err(format!("{key} must be a JSON object"));
+        }
+        full_data[key] = value.clone();
+        updated += 1;
+    }
+
+    if updated == 0 {
+        return Err("no rerun info field provided".into());
+    }
+
+    let file_path = get_record_path(&uid)?;
+    let json_string = serde_json::to_string_pretty(&full_data).map_err(|e| e.to_string())?;
+    fs::write(file_path, json_string).map_err(|e| e.to_string())?;
+    Ok("rerun info saved".into())
+}
+
+#[command]
 fn get_os() -> String {
     std::env::consts::OS.to_string()
 }
@@ -831,6 +885,8 @@ pub fn run() {
             ensure_pool_info_defaults,
             read_pool_info,
             save_pool_info,
+            read_rerun_records,
+            save_rerun_records,
             get_os,
             open_login_window,
             webdav::webdav_test_connection,

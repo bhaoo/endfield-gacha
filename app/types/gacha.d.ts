@@ -164,6 +164,8 @@ export interface HistoryRecord {
   seqId?: string;
 }
 
+export type RerunCountMap = Record<string, number>;
+
 export interface GachaStatistics {
   poolName: string;
   poolId?: string;
