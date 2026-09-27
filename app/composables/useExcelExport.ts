@@ -2,7 +2,7 @@ import { BaseDirectory, writeFile } from "@tauri-apps/plugin-fs";
 import { downloadDir, join } from "@tauri-apps/api/path";
 import type { Cell } from "write-excel-file/browser";
 import type { EndFieldCharInfo, EndFieldWeaponInfo, User } from "~/types/gacha";
-import { GIFT_INTEL_BOOK_KIND } from "~/utils/gachaCalc";
+import { isGiftKind } from "~/utils/gachaCalc";
 import { compareSeqId } from "~/utils/seqId";
 
 type ExportCell = string | number | Cell;
@@ -97,7 +97,7 @@ const headerRow = (): ExportRow =>
 
 const toCharRows = (records: Record<string, EndFieldCharInfo[]>) => {
   const exportableRecords = flattenRecordMap(records).filter(
-    (item) => item.kind !== GIFT_INTEL_BOOK_KIND,
+    (item) => !isGiftKind(item.kind),
   );
 
   return sortRecordsDesc(exportableRecords).map<ExportRow>((item) => [
@@ -113,7 +113,9 @@ const toCharRows = (records: Record<string, EndFieldCharInfo[]>) => {
 };
 
 const toWeaponRows = (records: Record<string, EndFieldWeaponInfo[]>) =>
-  sortRecordsDesc(flattenRecordMap(records)).map<ExportRow>((item) => [
+  sortRecordsDesc(
+    flattenRecordMap(records).filter((item) => !isGiftKind(item.kind)),
+  ).map<ExportRow>((item) => [
     formatDateTime24h(item.gachaTs),
     String(item.weaponName || ""),
     rarityCell(item.rarity),

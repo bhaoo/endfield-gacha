@@ -20,7 +20,7 @@ export const POOL_INFO_CHAR_POOL_KEYS = [
   JOINT_POOL_KEY,
 ] as const;
 const SPECIAL_BIG_PITY_MAX = 120;
-export const GIFT_INTEL_BOOK_KIND = "gift_intel_book";
+export const GIFT_KIND_PREFIX = "gift";
 
 export const WEAPON_LIMITED_POOL_TYPE = "special" as const;
 export const WEAPON_CONSTANT_POOL_TYPE = "constant" as const;
@@ -42,13 +42,17 @@ export const resolveWeaponPoolType = (poolId: string): string => {
 // 是否携带 kind 字段（角色有，武器没有）
 const hasKindField = (value: object): value is { kind?: string } => 'kind' in value
 
+// 是否为奖励记录
+export const isGiftKind = (kind: unknown): boolean =>
+  typeof kind === "string" && kind.startsWith(GIFT_KIND_PREFIX);
+
 /**
- * 剔除不属于抽卡记录的特殊物品（如寻访情报书）
+ * 剔除奖励记录（如寻访情报书、信物赠礼、武库赠礼）
  *
  * 用 in 收窄而非泛型约束，以免弱类型检测拒绝没有共同属性的类型。
  */
 const filterStatisticalRecords = <T extends object>(data: T[]): T[] =>
-  data.filter((item) => !hasKindField(item) || item.kind !== GIFT_INTEL_BOOK_KIND);
+  data.filter((item) => !hasKindField(item) || !isGiftKind(item.kind));
 
 export const POOL_NAME_MAP: Record<string, string> = {
   [SPECIAL_POOL_KEY]: "特许寻访",
