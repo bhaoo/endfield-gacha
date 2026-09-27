@@ -26,8 +26,8 @@ export const WEAPON_LIMITED_POOL_TYPE = "special" as const;
 export const WEAPON_CONSTANT_POOL_TYPE = "constant" as const;
 export const WEAPON_RERUN_POOL_TYPE = "rerun" as const;
 export const WEAPON_POOL_TYPE_LABELS: Record<string, string> = {
-  [WEAPON_LIMITED_POOL_TYPE]: "限定武器池",
-  [WEAPON_CONSTANT_POOL_TYPE]: "非限定武器池",
+  [WEAPON_LIMITED_POOL_TYPE]: "限定申领",
+  [WEAPON_CONSTANT_POOL_TYPE]: "常驻申领",
 };
 
 // 限定申领池的 poolId 形如 weponbox_1_0_1，重构申领池形如 rerun_wpn_yvonne；
