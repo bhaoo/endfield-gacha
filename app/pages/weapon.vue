@@ -66,9 +66,6 @@
           </div>
 
           <div class="flex items-center gap-2">
-            <UBadge v-if="selectedPool.officialTotalCount !== undefined && isRerunSelected && !isAllSelected" variant="outline">
-              累计申领：{{ selectedPool.officialTotalCount }} 抽
-            </UBadge>
             <UBadge variant="outline">
               当前已垫：{{ selectedPool.pityCount }} 抽
             </UBadge>
