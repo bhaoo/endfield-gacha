@@ -16,8 +16,8 @@
 
   <div v-else-if="typeGroups.length === 0" class="py-16 text-center text-muted">
     <p class="mb-2 text-4xl">🎴</p>
-    <p class="text-lg font-medium">暂无角色抽卡数据</p>
-    <p class="mt-1 text-sm">请先点击「同步最新数据」获取寻访记录。</p>
+    <p class="text-lg font-medium">暂无武器申领数据</p>
+    <p class="mt-1 text-sm">请先点击「同步最新数据」获取申领记录。</p>
   </div>
 
   <div v-else class="flex flex-col gap-4 md:h-full md:min-h-0 md:flex-row md:overflow-hidden">
@@ -66,6 +66,9 @@
           </div>
 
           <div class="flex items-center gap-2">
+            <UBadge v-if="selectedPool.officialTotalCount !== undefined && isRerunSelected && !isAllSelected" variant="outline">
+              累计申领：{{ selectedPool.officialTotalCount }} 抽
+            </UBadge>
             <UBadge variant="outline">
               当前已垫：{{ selectedPool.pityCount }} 抽
             </UBadge>
@@ -74,20 +77,21 @@
               :variant="selectedPool.gotUp6 ? 'solid' : 'outline'"
             >
               <span v-if="selectedPool.gotUp6">已获得当期 UP</span>
-              <span v-else>尚未获得当期 UP</span>
+              <span v-else-if="bigPity">大保底: {{ bigPity.count }} / {{ selectedPool.bigPityMax }}</span>
             </UBadge>
           </div>
         </div>
 
-        <p class="text-sm text-muted">
-          {{ selectedPool.totalPulls }} 抽 · {{ selectedPool.count6 }} 个 6★ ·
-          {{ selectedPool.count5 }} 个 5★ · {{ selectedPool.count4 }} 个 4★
-        </p>
+        <div v-if="rerunLocalGap" class="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-muted">
+          服务器累计 {{ rerunLocalGap.official }} 抽，本地累计记录仅 {{ rerunLocalGap.local }} 次。差值原因来自官方已不再保留 90 天之前的历史申领记录，故无法同步到本地进行补齐；大保底进度将按服务器累计次数计算以确保结果准确。
+        </div>
 
         <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
           <UCard class="text-center">
             <p class="text-xs text-muted">总抽数</p>
-            <p class="mt-1 text-2xl font-bold tabular-nums">{{ selectedPool.totalPulls }}</p>
+            <p class="mt-1 text-2xl font-bold tabular-nums">
+              {{ selectedPool.totalPulls }}
+            </p>
           </UCard>
           <UCard class="text-center">
             <p class="text-xs text-muted">6★ 出货</p>
@@ -184,13 +188,13 @@
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2">
                   <UProgress
-                    :model-value="Math.min(rec.pity, PITY_BAR_MAX)"
-                    :max="PITY_BAR_MAX"
+                    :model-value="Math.min(rec.pity, WEAPON_SMALL_PITY_MAX)"
+                    :max="WEAPON_SMALL_PITY_MAX"
                     class="h-2"
                     :ui="{ indicator: barColor(rec) }"
                   />
                   <span class="w-14 shrink-0 text-right text-sm font-semibold tabular-nums">
-                    {{ rec.pity }}<span class="text-xs font-normal text-muted">/{{ PITY_BAR_MAX }}</span>
+                    {{ rec.pity }}<span class="text-xs font-normal text-muted">/{{ WEAPON_SMALL_PITY_MAX }}</span>
                   </span>
                 </div>
               </div>
@@ -228,6 +232,9 @@ import {
   WEAPON_CONSTANT_POOL_TYPE,
   WEAPON_LIMITED_POOL_TYPE,
   WEAPON_POOL_TYPE_LABELS,
+  WEAPON_RERUN_POOL_TYPE,
+  WEAPON_SMALL_PITY_MAX,
+  resolveBigPity,
 } from '~/utils/gachaCalc'
 import { isSystemUid, systemUidLabel, SYSTEM_UID_CN } from '~/utils/systemAccount'
 
@@ -239,7 +246,6 @@ const mouseInside = ref(false);
 const onMouseEnter = () => mouseInside.value = true;
 const onMouseLeave = () =>  mouseInside.value = false;
 
-const PITY_BAR_MAX = 40
 const ALL_POOLS_VALUE = '__all__'
 
 const { weaponStatistics } = useGachaSync()
@@ -248,9 +254,10 @@ const isUserDataLoading = useState<boolean>('gacha-user-data-loading', () => fal
 const isSystem = computed(() => isSystemUid(uid.value))
 const systemLabel = computed(() => systemUidLabel(uid.value || SYSTEM_UID_CN))
 
-// 类型卡固定顺序：限定在前，非限定在后
+// 类型卡固定顺序：限定在前，非限定在后，重构申领独立成组
 const WEAPON_POOL_TYPE_ORDER = [
   WEAPON_LIMITED_POOL_TYPE,
+  WEAPON_RERUN_POOL_TYPE,
   WEAPON_CONSTANT_POOL_TYPE,
 ] as const
 
@@ -356,6 +363,35 @@ watch(
 )
 
 const history6 = computed(() => selectedPool.value?.history6 || [])
+
+// 所有武器池均有 80 抽 UP 大保底；重构申领的计数与「累计申领」同源，优先用服务器权威值
+const isRerunSelected = computed(() => selectedTypeKey.value === WEAPON_RERUN_POOL_TYPE)
+
+const bigPity = computed(() => {
+  const pool = selectedPool.value
+  if (!pool || isAllSelected.value) return null
+  return resolveBigPity(pool)
+})
+
+/**
+ * 本地重构申领记录少于服务器累计抽数
+ *
+ * 两侧统一按抽比对（接口 totalPullCount 为抽数，本地一件=一抽）。
+ * 差值来自官方已不再保留的历史记录，本地无法补齐；
+ * 大保底进度取自服务器累计值，因此仍然准确。
+ */
+const rerunLocalGap = computed(() => {
+  if (!isRerunSelected.value || isAllSelected.value) return null
+
+  const pool = selectedPool.value
+  if (!pool) return null
+
+  const official = pool.officialTotalCount
+  const local = pool.totalPulls || 0
+  if (official === undefined || official <= local) return null
+
+  return { official, local }
+})
 
 const offCount = computed(() => history6.value.filter((r) => isOff(r)).length)
 const newCount = computed(() => history6.value.filter((r) => !!r.isNew).length)

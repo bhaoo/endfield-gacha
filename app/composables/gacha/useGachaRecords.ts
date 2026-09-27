@@ -22,6 +22,16 @@ export const useGachaRecords = (params?: {
     () => ({}),
   );
 
+  // 官方累计寻访/申领次数（`poolId → 累计次数`，随同步刷新）
+  const charRerunInfo = useState<RerunCountMap>(
+    "gacha-rerun-info-char",
+    () => ({}),
+  );
+  const weaponRerunInfo = useState<RerunCountMap>(
+    "gacha-rerun-info-weapon",
+    () => ({}),
+  );
+
   const readUserDataRaw = async (uid: string, type: "char" | "weapon") => {
     const commandRead =
       type === "char" ? "read_char_records" : "read_weapon_records";
@@ -122,6 +132,7 @@ export const useGachaRecords = (params?: {
       if (type === "char") charRecords.value = data || {};
       else weaponRecords.value = data || {};
       if (type === "char") await params?.loadPoolInfo?.();
+      await readRerunCounts(uid);
     } catch (e) {
       console.error(e);
     }
@@ -174,8 +185,12 @@ export const useGachaRecords = (params?: {
   return {
     charRecords,
     weaponRecords,
+    charRerunInfo,
+    weaponRerunInfo,
     loadUserData,
     saveUserData,
+    readRerunCounts,
+    saveRerunCounts,
     readUserDataRaw,
     readMaxSeqIdFromMeta,
     getGlobalMaxSeqIdFromRaw: async (uid: string, type: "char" | "weapon") => {

@@ -124,6 +124,11 @@ export interface EndFieldCharInfo {
   poolName: string;
   rarity: number;
   seqId: string;
+  // 卡池版本号（重构寻访 #N 用）
+  poolVersion?: number | null;
+  poolType?: string;
+  // 展示名称；奖励为奖励名，抽卡为干员名
+  nameText?: string;
 }
 
 export interface EndFieldWeaponInfo {
@@ -136,6 +141,11 @@ export interface EndFieldWeaponInfo {
   isNew: boolean;
   gachaTs: string;
   seqId: string;
+  // 记录类型：申领为 draw，奖励为 gift_*
+  kind?: string;
+  poolVersion?: number | null;
+  poolType?: string;
+  nameText?: string;
 }
 
 export interface GachaItem {
@@ -164,6 +174,14 @@ export interface HistoryRecord {
   seqId?: string;
 }
 
+export interface RerunCountEntry {
+  poolId: string;
+  poolName: string;
+  totalPullCount: number;
+  online?: boolean;
+  imageUrl?: string;
+}
+
 export type RerunCountMap = Record<string, number>;
 
 export interface GachaStatistics {
@@ -180,6 +198,8 @@ export interface GachaStatistics {
   bigPityMax?: number;
   bigPityCount?: number;
   bigPityRemaining?: number;
+  /** 重构类型卡池官方累计寻访次数 */
+  officialTotalCount?: number;
   up6Id?: string;
   up6Ids?: string[];
   gotUp6?: boolean;

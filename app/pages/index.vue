@@ -78,20 +78,19 @@
           </div>
 
           <div class="flex items-center gap-2">
+            <UBadge v-if="selectedPool.officialTotalCount !== undefined && isRerunPoolType && !isAllSubPoolsSelected" variant="outline">
+              累计寻访：{{ selectedPool.officialTotalCount }} 抽
+            </UBadge>
             <UBadge variant="outline">
               当前已垫：{{ selectedPool.pityCount }} 抽
             </UBadge>
             <UBadge
-              v-if="
-                !isAllSubPoolsSelected &&
-                selectedPool.bigPityRemaining !== undefined &&
-                selectedPool.bigPityMax !== undefined
-              "
+              v-if="bigPity"
               :variant="selectedPool.gotUp6 ? 'solid' : 'outline'"
             >
               <span v-if="selectedPool.gotUp6">已获得当期 UP</span>
               <span v-else>
-                大保底: {{ selectedPool.bigPityMax - selectedPool.bigPityRemaining }} / {{ selectedPool.bigPityMax }}
+                大保底: {{ bigPity.count }} / {{ selectedPool.bigPityMax }}
               </span>
             </UBadge>
           </div>
@@ -165,6 +164,10 @@
                 加急出 UP × {{ rating.freeUpCount }}
             </UBadge>
           </template>
+        </div>
+
+        <div v-if="rerunLocalGap" class="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-muted">
+          服务器累计寻访次数为 {{ rerunLocalGap.official }} 次，本地累计寻访记录仅 {{ rerunLocalGap.local }} 次（加急招募不计入累计）。差值原因来自官方已不再保留 90 天之前的历史寻访记录，故无法同步到本地进行补齐；大保底进度将按服务器累计次数计算以确保结果准确。
         </div>
 
         <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -322,7 +325,7 @@ import type { GachaStatistics, HistoryRecord } from '~/types/gacha'
 import { sortHistory6Desc } from '~/utils/historySort'
 import { isSystemUid, systemUidLabel, SYSTEM_UID_CN } from '~/utils/systemAccount'
 import { ratePool, ratePoolAggregate } from '~/utils/gachaRating'
-import { POOL_NAME_MAP, SPECIAL_POOL_KEY, RERUN_POOL_KEY, JOINT_POOL_KEY, STANDARD_POOL_KEY, BEGINNER_POOL_KEY } from '~/utils/gachaCalc'
+import { POOL_NAME_MAP, SPECIAL_POOL_KEY, RERUN_POOL_KEY, JOINT_POOL_KEY, STANDARD_POOL_KEY, BEGINNER_POOL_KEY, RERUN_BIG_PITY_MAX, resolveBigPity } from '~/utils/gachaCalc'
 import specialPoolImg from '~/assets/images/pool/character_special.png'
 import standardPoolImg from '~/assets/images/pool/character_standard.png'
 import beginnerPoolImg from '~/assets/images/pool/character_beginner.png'
@@ -342,7 +345,8 @@ const POOL_IMAGE_MAP: Record<string, string> = {
   [SPECIAL_POOL_KEY]: specialPoolImg,
   [STANDARD_POOL_KEY]: standardPoolImg,
   [BEGINNER_POOL_KEY]: beginnerPoolImg,
-  [JOINT_POOL_KEY]: jointPoolImg
+  [JOINT_POOL_KEY]: jointPoolImg,
+  [RERUN_POOL_KEY]: specialPoolImg
 }
 
 // 角色头像预加载
@@ -466,6 +470,34 @@ const selectedPool = computed<GachaStatistics | undefined>(() => {
 })
 
 const poolImage = (pool: GachaStatistics) => POOL_IMAGE_MAP[pool.poolType || ''] || ''
+
+const isRerunPoolType = computed(() => selectedTypeKey.value === RERUN_POOL_KEY)
+
+const bigPity = computed(() => {
+  const pool = selectedPool.value
+  if (!pool || isAllSubPoolsSelected.value) return null
+  if (pool.poolType !== RERUN_POOL_KEY && pool.poolType !== SPECIAL_POOL_KEY) return null
+  return resolveBigPity(pool)
+})
+
+/**
+ * 本地重构寻访记录少于服务器累计次数
+ *
+ * 差值来自官方已不再保留近 90 天前的历史寻访记录，本地无法通过同步补齐，大保底进度优先取官方累计次数。
+ */
+const rerunLocalGap = computed(() => {
+  if (!isRerunPoolType.value) return null
+  if (isAllSubPoolsSelected.value) return null
+
+  const pool = selectedPool.value
+  if (!pool) return null
+
+  const official = pool.officialTotalCount
+  const local = pool.paidPulls || 0
+  if (official === undefined || official <= local) return null
+
+  return { official, local }
+})
 
 // 切换卡池类型：多卡池类型重置为「全部卡池」视图
 const selectType = (poolType?: string) => {

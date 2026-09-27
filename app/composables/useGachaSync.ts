@@ -62,8 +62,11 @@ export const useGachaSync = () => {
   const {
     charRecords,
     weaponRecords,
+    charRerunInfo,
+    weaponRerunInfo,
     loadUserData,
     saveUserData,
+    saveRerunCounts,
     readMaxSeqIdFromMeta,
     getGlobalMaxSeqIdFromRaw,
   } = useGachaRecords({ loadPoolInfo, currentUid });
@@ -97,6 +100,7 @@ export const useGachaSync = () => {
     ensureCharPoolInfoForPoolIds,
     ensureWeaponPoolInfoForPoolId,
     saveUserData,
+    saveRerunCounts,
   });
 
   const { charStatistics, weaponStatistics } = useGachaStatistics({
@@ -104,6 +108,8 @@ export const useGachaSync = () => {
     weaponRecords,
     poolInfoById,
     poolInfo,
+    charRerunInfo,
+    weaponRerunInfo,
   });
 
   const handleSync = async (
@@ -165,7 +171,7 @@ export const useGachaSync = () => {
     showToast(
       `${actionLabel}开始`,
       options?.full
-        ? `将全量获取${type === "char" ? "干员" : "武器"}数据（耗时较长），用于修复历史遗漏数据。`
+        ? `将全量获取${type === "char" ? "干员" : "武器"}数据（耗时较长），用于补齐近90天内的本地缺失的记录。`
         : `正在获取${type === "char" ? "干员" : "武器"}数据...`,
     );
 
@@ -291,17 +297,24 @@ export const useGachaSync = () => {
       const reasonText = syncResult.failureReason
         ? `；原因：${syncResult.failureReason}`
         : "";
+      const warningText = (syncResult.warnings || []).join(" ");
 
       if (syncResult.status === "success") {
         if (syncResult.count > 0) {
-          showToast(`${actionLabel}成功`, `新增 ${syncResult.count} 条寻访记录！`);
+          showToast(
+            `${actionLabel}成功`,
+            [`新增 ${syncResult.count} 条寻访记录！`, warningText].filter(Boolean).join(" "),
+          );
           scheduleAutoSync(effectiveUid, "抽卡记录已保存");
         } else {
           showToast(
             `${actionLabel}成功`,
-            options?.full
-              ? "未发现新增记录。"
-              : "已经是最新的啦！如果是刚抽的话可能有延迟哦~",
+            [
+              options?.full
+                ? "未发现新增记录。"
+                : "已经是最新的啦！如果是刚抽的话可能有延迟哦~",
+              warningText,
+            ].filter(Boolean).join(" "),
           );
         }
       } else if (syncResult.status === "partial_failed") {
@@ -314,7 +327,7 @@ export const useGachaSync = () => {
         }
         showToast(
           `${actionLabel}部分失败`,
-          [baseMsg, failedPoolsText, reasonText].filter(Boolean).join(" "),
+          [baseMsg, failedPoolsText, reasonText, warningText].filter(Boolean).join(" "),
         );
       } else {
         const failMsg =
@@ -326,7 +339,7 @@ export const useGachaSync = () => {
         }
         showToast(
           `${actionLabel}全部失败`,
-          [failMsg, failedPoolsText, reasonText].filter(Boolean).join(" "),
+          [failMsg, failedPoolsText, reasonText, warningText].filter(Boolean).join(" "),
         );
       }
     } catch (err: any) {
@@ -345,6 +358,8 @@ export const useGachaSync = () => {
     charStatistics,
     weaponStatistics,
     poolInfoById,
+    charRerunInfo,
+    weaponRerunInfo,
     isSyncing,
     syncProgress,
     handleSync,

@@ -4,6 +4,7 @@ import type {
   EndFieldWeaponInfo,
   GachaStatistics,
   PoolInfoEntry,
+  RerunCountMap,
 } from "~/types/gacha";
 import {
   JOINT_POOL_KEY,
@@ -23,6 +24,8 @@ export const useGachaStatistics = (params: {
   weaponRecords: Ref<Record<string, EndFieldWeaponInfo[]>>;
   poolInfoById: ComputedRef<Record<string, PoolInfoEntry>>;
   poolInfo: Ref<PoolInfoEntry[]>;
+  charRerunInfo: Ref<RerunCountMap>;
+  weaponRerunInfo: Ref<RerunCountMap>;
 }) => {
   const charStatistics = computed(() => {
     if (!params.charRecords.value) return [];
@@ -36,7 +39,13 @@ export const useGachaStatistics = (params: {
       if (poolType === SPECIAL_POOL_KEY) {
         out.push(...analyzeSpecialPoolData(list, params.poolInfoById.value));
       } else if (poolType === RERUN_POOL_KEY) {
-        out.push(...analyzeRerunPoolData(list, params.poolInfoById.value));
+        out.push(
+          ...analyzeRerunPoolData(
+            list,
+            params.poolInfoById.value,
+            params.charRerunInfo.value,
+          ),
+        );
       } else if (poolType === JOINT_POOL_KEY) {
         out.push(...analyzeJointPoolData(list, params.poolInfoById.value));
       } else out.push(analyzePoolData(poolType, list));
@@ -100,10 +109,13 @@ export const useGachaStatistics = (params: {
           poolKey,
           params.weaponRecords.value[poolKey]!,
           info?.up6_id,
+          params.weaponRerunInfo.value,
         );
         stat.isCurrentPool = poolKey === currentPoolId;
         return stat;
-      });
+      })
+      // 无有效申领记录的池（如仅同步到卡池列表）不进行展示
+      .filter((stat) => stat.totalPulls > 0);
   });
 
   return { charStatistics, weaponStatistics };

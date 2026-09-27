@@ -114,6 +114,12 @@ struct AccountBundle {
     character: Value,
     #[serde(default)]
     weapon: Value,
+    /// 重构寻访累计次数：`poolId → 累计寻访次数`
+    #[serde(default)]
+    character_rerun_info: Value,
+    /// 重构申领累计次数：`poolId → 累计申领次数`
+    #[serde(default)]
+    weapon_rerun_info: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -375,6 +381,44 @@ fn normalize_record_object(value: &Value) -> Value {
     json!({})
 }
 
+
+pub(crate) fn normalize_rerun_info_object(value: Option<&Value>) -> Value {
+    let Some(obj) = value.and_then(|v| v.as_object()) else {
+        return json!({});
+    };
+
+    let mut normalized = Map::new();
+    for (pool_id, count) in obj {
+        let pool_id = pool_id.trim();
+        if pool_id.is_empty() {
+            continue;
+        }
+        let Some(count) = count.as_i64().filter(|c| *c >= 0) else {
+            continue;
+        };
+        normalized.insert(pool_id.to_string(), json!(count));
+    }
+    Value::Object(normalized)
+}
+
+
+pub(crate) fn merge_rerun_info(local: &Value, remote: &Value) -> Value {
+    let local = normalize_rerun_info_object(Some(local));
+    let remote = normalize_rerun_info_object(Some(remote));
+
+    let mut merged = local.as_object().cloned().unwrap_or_default();
+    if let Some(remote_map) = remote.as_object() {
+        for (pool_id, count) in remote_map {
+            let count = count.as_i64().unwrap_or(0);
+            let existing = merged.get(pool_id).and_then(|c| c.as_i64()).unwrap_or(0);
+            if count > existing {
+                merged.insert(pool_id.clone(), json!(count));
+            }
+        }
+    }
+    Value::Object(merged)
+}
+
 fn build_local_bundle(user: &AppUser) -> Result<AccountBundle, String> {
     let full_data = load_local_record_value(&user.key)?;
     let character = normalize_record_object(full_data.get("character").unwrap_or(&json!({})));
@@ -407,6 +451,8 @@ fn build_local_bundle(user: &AppUser) -> Result<AccountBundle, String> {
         weapon_max_seqid,
         character,
         weapon,
+        character_rerun_info: normalize_rerun_info_object(full_data.get("character_rerun_info")),
+        weapon_rerun_info: normalize_rerun_info_object(full_data.get("weapon_rerun_info")),
     })
 }
 
@@ -438,6 +484,9 @@ fn parse_bundle_text(text: &str) -> Result<AccountBundle, String> {
     bundle.updated_at = normalize_string(&bundle.updated_at);
     bundle.character = normalize_record_object(&bundle.character);
     bundle.weapon = normalize_record_object(&bundle.weapon);
+    bundle.character_rerun_info =
+        normalize_rerun_info_object(Some(&bundle.character_rerun_info));
+    bundle.weapon_rerun_info = normalize_rerun_info_object(Some(&bundle.weapon_rerun_info));
     if bundle.character_max_seqid.trim().is_empty() {
         bundle.character_max_seqid = calc_max_seqid_from_records(&bundle.character);
     }
@@ -459,6 +508,8 @@ fn bundle_to_remote_value(bundle: &AccountBundle) -> Value {
         "updatedAt": bundle.updated_at.clone(),
         "character": bundle.character.clone(),
         "weapon": bundle.weapon.clone(),
+        "character_rerun_info": bundle.character_rerun_info.clone(),
+        "weapon_rerun_info": bundle.weapon_rerun_info.clone(),
     })
 }
 
@@ -468,6 +519,8 @@ fn bundle_to_hash_value(bundle: &AccountBundle) -> Value {
         "account": bundle.account.clone(),
         "character": bundle.character.clone(),
         "weapon": bundle.weapon.clone(),
+        "character_rerun_info": bundle.character_rerun_info.clone(),
+        "weapon_rerun_info": bundle.weapon_rerun_info.clone(),
     })
 }
 
@@ -830,6 +883,11 @@ fn merge_bundles(local: &AccountBundle, remote: &AccountBundle) -> Result<Accoun
         weapon_max_seqid: calc_max_seqid_from_records(&weapon),
         character,
         weapon,
+        character_rerun_info: merge_rerun_info(
+            &local.character_rerun_info,
+            &remote.character_rerun_info,
+        ),
+        weapon_rerun_info: merge_rerun_info(&local.weapon_rerun_info, &remote.weapon_rerun_info),
     })
 }
 
