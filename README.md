@@ -31,7 +31,7 @@
 
 - **添加账号同步**：支持应用内网页登录自动获取 Token，也支持手动粘贴 Token 添加账号。
 - **增量同步**：基于 `seqId` 自动判断需要补拉的分页，仅获取新的寻访记录。
-- **全量同步**：支持全量拉取寻访记录，用于补齐本地缺失的记录。
+- **全量同步**：支持全量拉取寻访记录，用于补齐本地缺失的记录。**(自 v0.7.0 起，全量同步需右键“同步”按钮进入菜单以使用)**
 - **重复记录自动去重**：相同 `seqId` 的记录不会重复写入，本地会按卡池追加缺失内容。
 - **同步进度可视化**：同步过程中会显示当前卡池与分页进度，便于查看同步状态。
 
@@ -90,9 +90,25 @@
 > 预览图可能与当前版本略有差异，以实际界面为准。
 
 <div align="center">
-  <img src="preview.png" alt="Preview" />
+  <table>
+    <tr>
+      <td align="center" width="50%">
+        <img src="./images/character-1.png" width="100%" alt="角色池图1">
+      </td>
+      <td align="center" width="50%">
+        <img src="./images/character-2.png" width="100%" alt="角色池图2">
+      </td>
+    </tr>
+    <tr>
+      <td align="center" width="50%">
+        <img src="./images/weapon-1.png" width="100%" alt="武器池图1">
+      </td>
+      <td align="center" width="50%">
+        <img src="./images/weapon-2.png" width="100%" alt="武器池图2">
+      </td>
+    </tr>
+  </table>
 </div>
-
 
 ## 下载与安装
 
