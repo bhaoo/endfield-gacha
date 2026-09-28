@@ -39,10 +39,7 @@
           @click="selectType(group.poolType)"
         >
           <span class="text-sm font-semibold leading-tight">{{ group.label }}</span>
-          <span class="flex items-center gap-2 text-xs text-muted">
-            <span>{{ group.totalPulls }} 抽</span>
-            <UBadge variant="subtle" size="sm">垫 {{ group.pityCount }} 抽</UBadge>
-          </span>
+          <span class="text-xs text-muted">{{ group.totalPulls }} 抽</span>
         </button>
       </div>
     </div>
@@ -66,7 +63,7 @@
           </div>
 
           <div class="flex items-center gap-2">
-            <UBadge variant="outline">
+            <UBadge v-if="!isAllSelected" variant="outline">
               当前已垫：{{ selectedPool.pityCount }} 抽
             </UBadge>
             <UBadge
@@ -266,8 +263,6 @@ const aggregatePools = (
   poolType: string,
   poolName: string,
 ): GachaStatistics => {
-  // 垫抽不跨池继承，聚合视图沿用当前池（无当前池时取最新池）的实时进度
-  const current = list.find((s) => s.isCurrentPool) || list[0]!
   const sum = (pick: (s: GachaStatistics) => number) =>
     list.reduce((acc, s) => acc + (pick(s) || 0), 0)
 
@@ -276,7 +271,7 @@ const aggregatePools = (
     poolId: `${poolType}_all`,
     poolName,
     totalPulls: sum((s) => s.totalPulls),
-    pityCount: current.pityCount,
+    pityCount: 0,
     count6: sum((s) => s.count6),
     count5: sum((s) => s.count5),
     count4: sum((s) => s.count4),
@@ -284,21 +279,14 @@ const aggregatePools = (
   }
 }
 
-// 卡池类型列表
 const typeGroups = computed(() =>
   WEAPON_POOL_TYPE_ORDER.map((poolType) => {
     const list = statsByType(poolType)
-    const label = WEAPON_POOL_TYPE_LABELS[poolType] || poolType
-    if (list.length <= 0) {
-      return { poolType, label, totalPulls: 0, pityCount: 0, available: false }
-    }
-    const aggregate = aggregatePools(list, poolType, label)
     return {
       poolType,
-      label,
-      totalPulls: aggregate.totalPulls,
-      pityCount: aggregate.pityCount,
-      available: true,
+      label: WEAPON_POOL_TYPE_LABELS[poolType] || poolType,
+      totalPulls: list.reduce((acc, s) => acc + (s.totalPulls || 0), 0),
+      available: list.length > 0,
     }
   }).filter((g) => g.available),
 )
