@@ -93,76 +93,6 @@
           </div>
         </div>
 
-        <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-          <template v-if="rating">
-            <span class="text-sm text-muted">卡池评价</span>
-            <UTooltip
-              :content="{ side: 'bottom', sideOffset: 8 }"
-              :ui="{ content: 'block h-auto max-w-none px-3 py-2.5' }"
-            >
-              <UBadge
-                :color="rating.tier.badge"
-                :variant="rating.tier.variant"
-                size="lg"
-                class="cursor-help font-semibold"
-              >
-                {{ rating.tier.name }}
-              </UBadge>
-
-              <template #content>
-                <div class="w-56 space-y-1.5 text-left">
-                  <p class="text-xs font-semibold text-highlighted">寻访评价明细</p>
-
-                  <div class="flex items-center justify-between gap-4 text-xs">
-                    <span class="text-muted">6★ 运气值</span>
-                    <span class="font-semibold tabular-nums text-highlighted">
-                      {{ (rating.q6 * 100).toFixed(1) }}%
-                    </span>
-                  </div>
-
-                  <div v-if="rating.qUp !== null" class="flex items-center justify-between gap-4 text-xs">
-                    <span class="text-muted">UP 运气值</span>
-                    <span class="font-semibold tabular-nums text-highlighted">
-                      {{ (rating.qUp * 100).toFixed(1) }}%
-                    </span>
-                  </div>
-
-                  <div v-if="rating.freeUpCount > 0" class="flex items-center justify-between gap-4 text-xs">
-                    <span class="text-muted">加急出 UP</span>
-                    <span class="font-semibold tabular-nums text-highlighted">
-                      ×{{ rating.freeUpCount }}
-                    </span>
-                  </div>
-
-                  <div v-if="rating.bonus > 0" class="flex items-center justify-between gap-4 text-xs">
-                    <span class="text-muted">加急加成</span>
-                    <span class="font-semibold tabular-nums text-warning">
-                      +{{ (rating.bonus * 100).toFixed(0) }}%
-                    </span>
-                  </div>
-
-                  <USeparator class="my-1.5" />
-
-                  <div class="flex items-center justify-between gap-4 text-xs">
-                    <span class="text-muted">最终评价分</span>
-                    <span class="font-semibold tabular-nums" :class="rating.tier.color">
-                      {{ (rating.score * 100).toFixed(1) }}%
-                    </span>
-                  </div>
-
-                  <p class="text-xs leading-relaxed text-dimmed">
-                    分位越高运气越好，50% 为理论中位水平。已计入小保底、大保底与 65 抽之后的 6★ 概率提升段。
-                  </p>
-                </div>
-              </template>
-            </UTooltip>
-
-            <UBadge v-if="rating.freeUpCount != 0" color="warning" variant="subtle" size="lg" class="font-semibold">
-                加急出 UP × {{ rating.freeUpCount }}
-            </UBadge>
-          </template>
-        </div>
-
         <div v-if="rerunLocalGap" class="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-muted">
           服务器累计寻访次数为 {{ rerunLocalGap.official }} 次，本地累计寻访记录仅 {{ rerunLocalGap.local }} 次（加急招募不计入累计）。差值原因来自官方已不再保留 90 天之前的历史寻访记录，故无法同步到本地进行补齐；大保底进度将按服务器累计次数计算以确保结果准确。
         </div>
@@ -321,7 +251,6 @@
 import type { GachaStatistics, HistoryRecord } from '~/types/gacha'
 import { sortHistory6Desc } from '~/utils/historySort'
 import { isSystemUid, systemUidLabel, SYSTEM_UID_CN } from '~/utils/systemAccount'
-import { ratePool, ratePoolAggregate } from '~/utils/gachaRating'
 import { POOL_NAME_MAP, SPECIAL_POOL_KEY, RERUN_POOL_KEY, JOINT_POOL_KEY, STANDARD_POOL_KEY, BEGINNER_POOL_KEY, RERUN_BIG_PITY_MAX, resolveBigPity } from '~/utils/gachaCalc'
 import specialPoolImg from '~/assets/images/pool/character_special.png'
 import standardPoolImg from '~/assets/images/pool/character_standard.png'
@@ -507,21 +436,6 @@ const selectType = (poolType?: string) => {
 
 const history6 = computed(() => selectedPool.value?.history6 || [])
 
-/**
- * 当前卡池的寻访评价
- *
- * 「全部卡池」为多个子池的聚合视图，各子池大保底计数相互独立，逐池建模后卷积。
- */
-const rating = computed(() => {
-  if (isAllSubPoolsSelected.value) {
-    return ratePoolAggregate(
-      subPoolStats.value.filter((s) => s.poolType === selectedTypeKey.value),
-    )
-  }
-  const pool = selectedPool.value
-  return pool ? ratePool(pool) : null
-})
-
 const offCount = computed(() => history6.value.filter((r) => isOff(r)).length)
 const newCount = computed(() => history6.value.filter((r) => !!r.isNew).length)
 
@@ -557,9 +471,4 @@ const starRows = computed(() => {
     { label: '4★', count: s.count4, color: 'text-purple-500', dot: 'bg-purple-500', progressColor: 'bg-purple-500' },
   ]
 })
-
-const pityProgressMax = computed(() => selectedPool.value?.bigPityMax || 80)
-const pityProgressValue = computed(() =>
-  Math.min(selectedPool.value?.pityCount || 0, pityProgressMax.value),
-)
 </script>

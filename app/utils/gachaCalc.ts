@@ -298,8 +298,6 @@ export const analyzeSpecialPoolData = (
       paidPulls: 0,
       freePulls: 0,
       pityCount: 0,
-      // 小保底跨池继承：进入该池时的实时进度
-      startPity: globalSmallPity,
       bigPityMax: SPECIAL_BIG_PITY_MAX,
       bigPityCount: 0,
       bigPityRemaining: SPECIAL_BIG_PITY_MAX,
@@ -412,8 +410,6 @@ export const analyzeRerunPoolData = (
         paidPulls: 0,
         freePulls: 0,
         pityCount: 0,
-        // 小保底跨池继承：进入该池时的实时进度
-        startPity: globalSmallPity,
         bigPityMax: SPECIAL_BIG_PITY_MAX,
         bigPityCount: 0,
         bigPityRemaining: SPECIAL_BIG_PITY_MAX,
