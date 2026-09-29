@@ -1,29 +1,69 @@
-import type { EndFieldCharInfo, GachaStatistics, HistoryRecord, EndFieldWeaponInfo, EndfieldGachaParams } from '~/types/gacha'
-
-export const POOL_TYPES = [
-  "E_CharacterGachaPoolType_Special",
-  "E_CharacterGachaPoolType_Joint",
-  "E_CharacterGachaPoolType_Standard",
-  "E_CharacterGachaPoolType_Beginner",
-] as const;
+import type { EndFieldCharInfo, GachaStatistics, HistoryRecord, EndFieldWeaponInfo, EndfieldGachaParams, RerunCountEntry, RerunCountMap } from '~/types/gacha'
 
 export const SPECIAL_POOL_KEY = "E_CharacterGachaPoolType_Special" as const;
+export const RERUN_POOL_KEY = "E_CharacterGachaPoolType_Rerun" as const;
 export const JOINT_POOL_KEY = "E_CharacterGachaPoolType_Joint" as const;
+export const STANDARD_POOL_KEY = "E_CharacterGachaPoolType_Standard" as const;
+export const BEGINNER_POOL_KEY = "E_CharacterGachaPoolType_Beginner" as const;
+
+export const POOL_TYPES = [
+  SPECIAL_POOL_KEY,
+  RERUN_POOL_KEY,
+  JOINT_POOL_KEY,
+  STANDARD_POOL_KEY,
+  BEGINNER_POOL_KEY,
+] as const;
+
 export const POOL_INFO_CHAR_POOL_KEYS = [
   SPECIAL_POOL_KEY,
+  RERUN_POOL_KEY,
   JOINT_POOL_KEY,
 ] as const;
 const SPECIAL_BIG_PITY_MAX = 120;
-export const GIFT_INTEL_BOOK_KIND = "gift_intel_book";
+export const RERUN_BIG_PITY_MAX = SPECIAL_BIG_PITY_MAX;
+export const WEAPON_SMALL_PITY_MAX = 40;
+export const WEAPON_BIG_PITY_MAX = 80;
+export const GIFT_KIND_PREFIX = "gift";
 
-const filterStatisticalRecords = <T extends { kind?: string }>(data: T[]): T[] =>
-  data.filter((item) => item.kind !== GIFT_INTEL_BOOK_KIND);
+export const WEAPON_LIMITED_POOL_TYPE = "special" as const;
+export const WEAPON_CONSTANT_POOL_TYPE = "constant" as const;
+export const WEAPON_RERUN_POOL_TYPE = "rerun" as const;
+export const WEAPON_POOL_TYPE_LABELS: Record<string, string> = {
+  [WEAPON_LIMITED_POOL_TYPE]: "限定申领",
+  [WEAPON_CONSTANT_POOL_TYPE]: "常驻申领",
+  [WEAPON_RERUN_POOL_TYPE]: "重构申领",
+};
+
+// 限定申领池的 poolId 形如 weponbox_1_0_1，重构申领池形如 rerun_wpn_yvonne；
+// 常驻申领池带 constant 段（如 weaponbox_constant_2）
+export const resolveWeaponPoolType = (poolId: string): string => {
+  const value = String(poolId || "").toLowerCase();
+  if (value.includes(WEAPON_CONSTANT_POOL_TYPE)) return WEAPON_CONSTANT_POOL_TYPE;
+  if (value.startsWith("rerun") || value.includes("rerun_")) return WEAPON_RERUN_POOL_TYPE;
+  return WEAPON_LIMITED_POOL_TYPE;
+};
+
+// 是否携带 kind 字段（角色有，武器没有）
+const hasKindField = (value: object): value is { kind?: string } => 'kind' in value
+
+// 是否为奖励记录
+export const isGiftKind = (kind: unknown): boolean =>
+  typeof kind === "string" && kind.startsWith(GIFT_KIND_PREFIX);
+
+/**
+ * 剔除奖励记录（如寻访情报书、信物赠礼、武库赠礼）
+ *
+ * 用 in 收窄而非泛型约束，以免弱类型检测拒绝没有共同属性的类型。
+ */
+const filterStatisticalRecords = <T extends object>(data: T[]): T[] =>
+  data.filter((item) => !hasKindField(item) || !isGiftKind(item.kind));
 
 export const POOL_NAME_MAP: Record<string, string> = {
-  "E_CharacterGachaPoolType_Special": "特许寻访",
-  "E_CharacterGachaPoolType_Joint": "辉光庆典",
-  "E_CharacterGachaPoolType_Standard": "基础寻访",
-  "E_CharacterGachaPoolType_Beginner": "启程寻访"
+  [SPECIAL_POOL_KEY]: "特许寻访",
+  [RERUN_POOL_KEY]: "重构寻访",
+  [JOINT_POOL_KEY]: "辉光庆典",
+  [STANDARD_POOL_KEY]: "基础寻访",
+  [BEGINNER_POOL_KEY]: "启程寻访",
 };
 
 export const toUp6IdList = (value: unknown): string[] => {
@@ -43,6 +83,98 @@ export const getPoolInfoUp6Ids = (info?: {
 }): string[] => {
   const up6Ids = toUp6IdList(info?.up6_ids);
   return up6Ids.length > 0 ? up6Ids : toUp6IdList(info?.up6_id);
+};
+
+/**
+ * 解析官方累计次数接口
+ *
+ * 字段缺失或类型不符时返回 null
+ */
+export const normalizeRerunCountEntry = (value: unknown): RerunCountEntry | null => {
+  if (!value || typeof value !== "object") return null;
+  const raw = value as Record<string, unknown>;
+  const poolId = String(raw.poolId || "").trim();
+  const poolName = String(raw.poolName || "").trim();
+  if (!poolId || !poolName) return null;
+
+  const totalPullCount = Number(raw.totalPullCount);
+  const imageUrl = String(raw.imageUrl || "").trim();
+
+  return {
+    poolId,
+    poolName,
+    totalPullCount:
+      Number.isFinite(totalPullCount) && totalPullCount > 0 ? Math.floor(totalPullCount) : 0,
+    online: typeof raw.online === "boolean" ? raw.online : undefined,
+    imageUrl: imageUrl || undefined,
+  };
+};
+
+/** poolId → 累计次数 映射 */
+export const toRerunCountMap = (entries: unknown): RerunCountMap => {
+  const map: RerunCountMap = {};
+  if (!Array.isArray(entries)) return map;
+
+  for (const item of entries) {
+    const entry = normalizeRerunCountEntry(item);
+    if (!entry) continue;
+    map[entry.poolId] = Math.max(map[entry.poolId] || 0, entry.totalPullCount);
+  }
+  return map;
+};
+
+/** 丢弃非数字、负数与非法 poolId */
+export const normalizeRerunCountMap = (value: unknown): RerunCountMap => {
+  const map: RerunCountMap = {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) return map;
+
+  for (const [poolId, count] of Object.entries(value as Record<string, unknown>)) {
+    const key = String(poolId || "").trim();
+    if (!key) continue;
+    const num = Number(count);
+    if (!Number.isFinite(num) || num < 0) continue;
+    map[key] = Math.floor(num);
+  }
+  return map;
+};
+
+/** 合并累计次数（按 poolId 取较大数） */
+export const mergeRerunCountMap = (
+  local: RerunCountMap | undefined,
+  incoming: RerunCountMap | undefined,
+): RerunCountMap => {
+  const merged: RerunCountMap = { ...normalizeRerunCountMap(local) };
+  for (const [poolId, count] of Object.entries(normalizeRerunCountMap(incoming))) {
+    merged[poolId] = Math.max(merged[poolId] || 0, count);
+  }
+  return merged;
+};
+
+/** 取某个重构卡池的累计抽数 */
+export const findRerunCount = (
+  map: RerunCountMap | undefined,
+  poolId: string | undefined,
+): number | undefined => {
+  if (!map) return undefined;
+  const id = String(poolId || "").trim();
+  if (!id) return undefined;
+  return map[id];
+};
+
+/** 重构申领优先使用官方累计次数计算大保底进度 */
+export const resolveBigPity = (stat: {
+  gotUp6?: boolean;
+  bigPityMax?: number;
+  officialTotalCount?: number;
+  bigPityCount?: number;
+}): { count: number; remaining: number } | null => {
+  const max = Number(stat.bigPityMax || 0);
+  if (max <= 0) return null;
+  if (stat.gotUp6) return { count: 0, remaining: 0 };
+
+  // 重构申领取官方跨版本累计次数，在本地缺失历史 UP 记录时可能超过 120 上限，将进度调整到 120
+  const count = Math.min(Number(stat.officialTotalCount ?? stat.bigPityCount ?? 0), max);
+  return { count, remaining: max - count };
 };
 
 export const parseGachaParams = (uri: string): EndfieldGachaParams | null => {
@@ -68,24 +200,35 @@ export const analyzePoolData = (poolKey: string, rawData: EndFieldCharInfo[]): G
   let count6 = 0;
   let count5 = 0;
   let count4 = 0;
+  let paidPulls = 0;
+  let freePulls = 0;
+  // 仅付费抽计入保底（加急招募不计入保底计数）
   let pullsSinceLast6 = 0;
 
   const historyRecords: HistoryRecord[] = [];
 
   for (const item of data) {
-    pullsSinceLast6++;
+    const isFree = !!item.isFree;
+    if (isFree) freePulls++;
+    else {
+      paidPulls++;
+      pullsSinceLast6++;
+    }
+
     if (item.rarity === 6) {
       count6++;
       historyRecords.push({
         name: item.charName,
+        charId: item.charId,
         pity: pullsSinceLast6,
         isNew: item.isNew,
+        isFree,
         gachaTs: item.gachaTs,
         seqId: item.seqId,
         poolId: item.poolId,
         poolName: item.poolName,
       });
-      pullsSinceLast6 = 0;
+      if (!isFree) pullsSinceLast6 = 0;
     } else if (item.rarity === 5) {
       count5++;
     } else if (item.rarity === 4) {
@@ -99,6 +242,8 @@ export const analyzePoolData = (poolKey: string, rawData: EndFieldCharInfo[]): G
     poolType: poolKey,
     poolName: POOL_NAME_MAP[poolKey] || poolKey,
     totalPulls: data.length,
+    paidPulls,
+    freePulls,
     pityCount: pullsSinceLast6,
     count6,
     count5,
@@ -192,6 +337,7 @@ export const analyzeSpecialPoolData = (
       current.count6++;
       current.history6.push({
         name: item.charName,
+        charId: item.charId,
         pity: globalSmallPity,
         isNew: item.isNew,
         isFree,
@@ -221,7 +367,126 @@ export const analyzeSpecialPoolData = (
   return results.reverse();
 };
 
-// 特殊寻访无小保底/大保底
+/**
+ * 重构寻访
+ *
+ * - 80 抽 6★ 保底在所有「重构寻访」卡池共享
+ * - 120 抽 UP 6★ 大保底按「{{pool_name}}」跨版本继承
+ */
+export const analyzeRerunPoolData = (
+  rawData: EndFieldCharInfo[],
+  poolInfoById: Record<
+    string,
+    { pool_name?: string; up6_id?: string; version_num?: string }
+  > = {},
+  rerunCounts: RerunCountMap = {},
+): GachaStatistics[] => {
+  const data = filterStatisticalRecords(rawData).reverse();
+
+  let globalSmallPity = 0;
+
+  const byPoolName = new Map<string, GachaStatistics>();
+  const results: GachaStatistics[] = [];
+  let latestPoolName = "";
+
+  const resolvePoolName = (item: EndFieldCharInfo): string =>
+    String(item.poolName || "").trim() ||
+    String(poolInfoById[item.poolId]?.pool_name || "").trim() ||
+    String(item.poolId || "").trim() ||
+    POOL_NAME_MAP[RERUN_POOL_KEY] ||
+    RERUN_POOL_KEY;
+
+  for (const item of data) {
+    const poolName = resolvePoolName(item);
+
+    let current = byPoolName.get(poolName);
+    if (!current) {
+      current = {
+        poolType: RERUN_POOL_KEY,
+        poolId: item.poolId,
+        poolName,
+        isCurrentPool: false,
+        totalPulls: 0,
+        paidPulls: 0,
+        freePulls: 0,
+        pityCount: 0,
+        bigPityMax: SPECIAL_BIG_PITY_MAX,
+        bigPityCount: 0,
+        bigPityRemaining: SPECIAL_BIG_PITY_MAX,
+        gotUp6: false,
+        count6: 0,
+        count5: 0,
+        count4: 0,
+        history6: [] as HistoryRecord[],
+      };
+      byPoolName.set(poolName, current);
+      results.push(current);
+    }
+
+    const poolId = String(item.poolId || "").trim();
+    if (poolId) current.poolId = poolId;
+
+    current.totalPulls++;
+
+    const isFree = !!item.isFree;
+    if (isFree) {
+      current.freePulls = (current.freePulls || 0) + 1;
+    } else {
+      current.paidPulls = (current.paidPulls || 0) + 1;
+      globalSmallPity++;
+    }
+
+    if (item.rarity === 6) {
+      current.count6++;
+      current.history6.push({
+        name: item.charName,
+        charId: item.charId,
+        pity: globalSmallPity,
+        isNew: item.isNew,
+        isFree,
+        poolId: item.poolId,
+        poolName,
+        gachaTs: item.gachaTs,
+        seqId: item.seqId,
+      });
+
+      if (!isFree) globalSmallPity = 0;
+    } else if (item.rarity === 5) {
+      current.count5++;
+    } else if (item.rarity === 4) {
+      current.count4++;
+    }
+
+    current.pityCount = globalSmallPity;
+    latestPoolName = poolName;
+  }
+
+  for (const stat of results) {
+    const poolId = String(stat.poolId || "").trim();
+
+    stat.up6Id = String(poolInfoById[poolId]?.up6_id || "").trim() || undefined;
+
+    for (const rec of stat.history6) {
+      rec.up6Id = stat.up6Id;
+      rec.isUp = !!stat.up6Id && rec.charId === stat.up6Id;
+      if (rec.isUp) stat.gotUp6 = true;
+    }
+
+    stat.officialTotalCount = findRerunCount(rerunCounts, poolId);
+    stat.bigPityCount = stat.paidPulls || 0;
+    const pity = resolveBigPity(stat);
+    stat.bigPityRemaining = pity?.remaining ?? 0;
+    stat.history6.reverse();
+  }
+
+  // 最后一条寻访记录所属的即为当前池
+  const latest = byPoolName.get(latestPoolName);
+  if (latest) latest.isCurrentPool = true;
+
+  return results.reverse();
+};
+
+// 辉光庆典类型无小保底/大保底
 export const analyzeJointPoolData = (
   rawData: EndFieldCharInfo[],
   poolInfoById: Record<
@@ -299,6 +564,7 @@ export const analyzeJointPoolData = (
       current.count6++;
       current.history6.push({
         name: item.charName,
+        charId: item.charId,
         pity: isFree ? 0 : paidPity,
         isNew: item.isNew,
         isFree,
@@ -333,18 +599,28 @@ export const analyzeWeaponPoolData = (
   poolKey: string,
   rawData: EndFieldWeaponInfo[],
   up6Id?: string,
+  rerunCounts: RerunCountMap = {},
 ): GachaStatistics => {
-  const data = [...rawData].reverse();
+  const data = filterStatisticalRecords(rawData).reverse();
+  const poolType = resolveWeaponPoolType(poolKey);
+  const isRerun = poolType === WEAPON_RERUN_POOL_TYPE;
 
   let count6 = 0;
   let count5 = 0;
   let count4 = 0;
   let pullsSinceLast6 = 0;
   let gotUp6 = false;
+  let currentVersion: number | null = null;
 
   const historyRecords: HistoryRecord[] = [];
 
   for (const item of data) {
+    if (isRerun && typeof item.poolVersion === "number" && Number.isFinite(item.poolVersion)) {
+      if (currentVersion !== null && item.poolVersion !== currentVersion) {
+        pullsSinceLast6 = 0;
+      }
+      currentVersion = item.poolVersion;
+    }
     pullsSinceLast6++;
 
     if (item.rarity === 6) {
@@ -377,9 +653,10 @@ export const analyzeWeaponPoolData = (
     ? data[data.length - 1]!.poolName
     : poolKey;
 
-  return {
+  const stat: GachaStatistics = {
     poolId: poolKey,
     poolName: displayPoolName,
+    poolType,
     totalPulls: data.length,
     pityCount: pullsSinceLast6,
     up6Id,
@@ -389,6 +666,16 @@ export const analyzeWeaponPoolData = (
     count4,
     history6: historyRecords
   };
+
+  // 出 UP 后 resolveBigPity 归零，未出 UP 时 bigPityCount 为该池累计抽数
+  stat.bigPityMax = WEAPON_BIG_PITY_MAX;
+  stat.bigPityCount = stat.totalPulls;
+  if (isRerun) stat.officialTotalCount = findRerunCount(rerunCounts, poolKey);
+
+  const pity = resolveBigPity(stat);
+  stat.bigPityRemaining = pity?.remaining ?? 0;
+
+  return stat;
 }
 
 export const delay = (min: number, max: number) => {

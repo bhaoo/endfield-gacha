@@ -37,7 +37,7 @@ const option = computed(() => {
         avoidLabelOverlap: false,
         itemStyle: {
           borderRadius: 10,
-          borderColor: '#fff',
+          borderColor: 'var(--ui-bg)',
           borderWidth: 2
         },
         label: {

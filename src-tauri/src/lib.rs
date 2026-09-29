@@ -262,6 +262,36 @@ fn default_pool_info() -> serde_json::Value {
             "pool_name": "明曜申领",
             "pool_type": "special",
             "up6_id": "wpn_lance_0014"
+        },
+        {
+            "pool_gacha_type": "char",
+            "pool_id": "special_1_5_1",
+            "pool_name": "冬猎",
+            "pool_type": "special",
+            "up6_id": "chr_0034_typhoea"
+        },
+        {
+            "pool_gacha_type": "weapon",
+            "pool_id": "weponbox_1_5_1",
+            "pool_name": "幽寒申领",
+            "pool_type": "special",
+            "up6_id": "wpn_funnel_0019"
+        },
+        {
+            "pool_gacha_type": "char",
+            "pool_id": "rerun_chr_yvonne",
+            "pool_name": "绚丽异彩",
+            "pool_type": "rerun",
+            "up6_id": "chr_0017_yvonne",
+            "version_num": "1"
+        },
+        {
+            "pool_gacha_type": "weapon",
+            "pool_id": "rerun_wpn_yvonne",
+            "pool_name": "点绘申领",
+            "pool_type": "rerun",
+            "up6_id": "wpn_pistol_0010",
+            "version_num": "1"
         }
     ])
 }
@@ -794,6 +824,60 @@ fn save_pool_info(data: serde_json::Value) -> Result<String, String> {
 }
 
 #[command]
+fn read_rerun_records(uid: String) -> Result<serde_json::Value, String> {
+    if uid.trim().is_empty() {
+        return Err("UID cannot be empty".into());
+    }
+
+    let full_data = load_full_record(&uid)?;
+    let pick = |key: &str| -> serde_json::Value {
+        match full_data.get(key) {
+            Some(serde_json::Value::Object(obj)) => serde_json::Value::Object(obj.clone()),
+            _ => serde_json::json!({}),
+        }
+    };
+
+    Ok(serde_json::json!({
+        "character_rerun_info": pick("character_rerun_info"),
+        "weapon_rerun_info": pick("weapon_rerun_info")
+    }))
+}
+
+#[command]
+fn save_rerun_records(uid: String, data: serde_json::Value) -> Result<String, String> {
+    if uid.trim().is_empty() {
+        return Err("UID cannot be empty".into());
+    }
+
+    let Some(incoming) = data.as_object() else {
+        return Err("data must be a JSON object".into());
+    };
+
+    let mut full_data = load_full_record(&uid)?;
+    let mut updated = 0usize;
+
+    for key in ["character_rerun_info", "weapon_rerun_info"] {
+        let Some(value) = incoming.get(key) else {
+            continue;
+        };
+        if !value.is_object() {
+            return Err(format!("{key} must be a JSON object"));
+        }
+        full_data[key] = value.clone();
+        updated += 1;
+    }
+
+    if updated == 0 {
+        return Err("no rerun info field provided".into());
+    }
+
+    let file_path = get_record_path(&uid)?;
+    let json_string = serde_json::to_string_pretty(&full_data).map_err(|e| e.to_string())?;
+    fs::write(file_path, json_string).map_err(|e| e.to_string())?;
+    Ok("rerun info saved".into())
+}
+
+#[command]
 fn get_os() -> String {
     std::env::consts::OS.to_string()
 }
@@ -817,6 +901,8 @@ pub fn run() {
             ensure_pool_info_defaults,
             read_pool_info,
             save_pool_info,
+            read_rerun_records,
+            save_rerun_records,
             get_os,
             open_login_window,
             webdav::webdav_test_connection,

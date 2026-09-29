@@ -2,7 +2,7 @@ import { fetch } from "@tauri-apps/plugin-http";
 import { invoke } from "@tauri-apps/api/core";
 import type { Ref } from "vue";
 import type { PoolInfoEntry } from "~/types/gacha";
-import { toUp6IdList } from "~/utils/gachaCalc";
+import { resolveWeaponPoolType, toUp6IdList } from "~/utils/gachaCalc";
 
 export const useGachaPoolInfo = (params: { userAgent: Ref<string> }) => {
   const poolInfoLoaded = ref(false);
@@ -21,14 +21,20 @@ export const useGachaPoolInfo = (params: { userAgent: Ref<string> }) => {
       return null;
     }
     const up6Ids = toUp6IdList(value.up6_ids);
+    const versionNum = String(value.version_num ?? "").trim();
+    const poolGachaType = String(value.pool_gacha_type || "");
 
     return {
       pool_id: value.pool_id,
-      pool_gacha_type: String(value.pool_gacha_type || ""),
+      pool_gacha_type: poolGachaType,
       pool_name: String(value.pool_name || ""),
-      pool_type: String(value.pool_type || ""),
+      pool_type:
+        poolGachaType === "weapon"
+          ? resolveWeaponPoolType(value.pool_id)
+          : String(value.pool_type || ""),
       up6_id: String(value.up6_id || "").trim(),
       up6_ids: up6Ids.length > 0 ? up6Ids : undefined,
+      version_num: versionNum || undefined,
     };
   };
 
@@ -72,11 +78,20 @@ export const useGachaPoolInfo = (params: { userAgent: Ref<string> }) => {
     if (poolInfoLoaded.value) return;
     try {
       const data = await invoke<any>("read_pool_info");
-      poolInfo.value = Array.isArray(data)
-        ? data
-            .map(normalizePoolInfoEntry)
-            .filter((it): it is PoolInfoEntry => !!it)
-        : [];
+      const raw: any[] = Array.isArray(data) ? data : [];
+
+      let healed = false;
+      const entries: PoolInfoEntry[] = [];
+      for (const rawEntry of raw) {
+        const entry = normalizePoolInfoEntry(rawEntry);
+        if (!entry) continue;
+        if (String(rawEntry?.pool_type || "") !== entry.pool_type) healed = true;
+        entries.push(entry);
+      }
+      poolInfo.value = entries;
+
+      // 武器池 pool_type 改由 poolId 解析用于将 v0.6 及之前版本的错误值进行修复
+      if (healed) await savePoolInfo();
     } catch (e) {
       console.error("[poolInfo] read_pool_info failed", e);
       poolInfo.value = [];
@@ -117,6 +132,7 @@ export const useGachaPoolInfo = (params: { userAgent: Ref<string> }) => {
 
       const up6Ids = getCharPoolUp6Ids(pool);
       const isMultiUp = up6Ids.length > 1;
+      const versionNum = String(pool.version_num ?? "").trim();
 
       const entry: PoolInfoEntry = {
         pool_id: poolId,
@@ -125,6 +141,7 @@ export const useGachaPoolInfo = (params: { userAgent: Ref<string> }) => {
         pool_type: String(pool.pool_type || ""),
         up6_id: isMultiUp ? "" : up6Ids[0] || "",
         up6_ids: isMultiUp ? up6Ids : undefined,
+        version_num: versionNum || undefined,
       };
       return entry;
     } catch (e) {
@@ -160,15 +177,15 @@ export const useGachaPoolInfo = (params: { userAgent: Ref<string> }) => {
       const up6Name = String(pool.up6_name || "").trim();
       const all = Array.isArray(pool.all) ? pool.all : [];
       const up6Ids = findUp6IdsByNames(all, up6Name ? [up6Name] : []);
-
-      const isConstant = String(p.poolId).toLowerCase().includes("constant");
+      const versionNum = String(pool.version_num ?? "").trim();
 
       const entry: PoolInfoEntry = {
         pool_gacha_type: String(pool.pool_gacha_type || "weapon"),
         pool_id: p.poolId,
         pool_name: String(pool.pool_name || ""),
-        pool_type: isConstant ? "constant" : "special",
+        pool_type: resolveWeaponPoolType(p.poolId),
         up6_id: up6Ids[0] || "",
+        version_num: versionNum || undefined,
       };
       return entry;
     } catch (e) {
@@ -228,7 +245,8 @@ export const useGachaPoolInfo = (params: { userAgent: Ref<string> }) => {
     const existing = (poolInfo.value || []).find(
       (x) => x?.pool_id === poolId && x?.pool_gacha_type === "weapon",
     );
-    if (existing) return;
+    // pool_type 读取时已按 poolId 重算，无需再比对；仅 UP 缺失时才重新拉取
+    if (existing && String(existing.up6_id || "").trim()) return;
 
     const entry = await fetchWeaponPoolInfoFromApi({
       provider: p.provider,
