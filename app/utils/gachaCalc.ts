@@ -610,10 +610,17 @@ export const analyzeWeaponPoolData = (
   let count4 = 0;
   let pullsSinceLast6 = 0;
   let gotUp6 = false;
+  let currentVersion: number | null = null;
 
   const historyRecords: HistoryRecord[] = [];
 
   for (const item of data) {
+    if (isRerun && typeof item.poolVersion === "number" && Number.isFinite(item.poolVersion)) {
+      if (currentVersion !== null && item.poolVersion !== currentVersion) {
+        pullsSinceLast6 = 0;
+      }
+      currentVersion = item.poolVersion;
+    }
     pullsSinceLast6++;
 
     if (item.rarity === 6) {
