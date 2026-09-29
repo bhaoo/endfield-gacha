@@ -114,6 +114,12 @@ struct AccountBundle {
     character: Value,
     #[serde(default)]
     weapon: Value,
+    /// 重构寻访累计次数：`poolId → 累计寻访次数`
+    #[serde(default)]
+    character_rerun_info: Value,
+    /// 重构申领累计次数：`poolId → 累计申领次数`
+    #[serde(default)]
+    weapon_rerun_info: Value,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -375,6 +381,44 @@ fn normalize_record_object(value: &Value) -> Value {
     json!({})
 }
 
+
+pub(crate) fn normalize_rerun_info_object(value: Option<&Value>) -> Value {
+    let Some(obj) = value.and_then(|v| v.as_object()) else {
+        return json!({});
+    };
+
+    let mut normalized = Map::new();
+    for (pool_id, count) in obj {
+        let pool_id = pool_id.trim();
+        if pool_id.is_empty() {
+            continue;
+        }
+        let Some(count) = count.as_i64().filter(|c| *c >= 0) else {
+            continue;
+        };
+        normalized.insert(pool_id.to_string(), json!(count));
+    }
+    Value::Object(normalized)
+}
+
+
+pub(crate) fn merge_rerun_info(local: &Value, remote: &Value) -> Value {
+    let local = normalize_rerun_info_object(Some(local));
+    let remote = normalize_rerun_info_object(Some(remote));
+
+    let mut merged = local.as_object().cloned().unwrap_or_default();
+    if let Some(remote_map) = remote.as_object() {
+        for (pool_id, count) in remote_map {
+            let count = count.as_i64().unwrap_or(0);
+            let existing = merged.get(pool_id).and_then(|c| c.as_i64()).unwrap_or(0);
+            if count > existing {
+                merged.insert(pool_id.clone(), json!(count));
+            }
+        }
+    }
+    Value::Object(merged)
+}
+
 fn build_local_bundle(user: &AppUser) -> Result<AccountBundle, String> {
     let full_data = load_local_record_value(&user.key)?;
     let character = normalize_record_object(full_data.get("character").unwrap_or(&json!({})));
@@ -407,6 +451,8 @@ fn build_local_bundle(user: &AppUser) -> Result<AccountBundle, String> {
         weapon_max_seqid,
         character,
         weapon,
+        character_rerun_info: normalize_rerun_info_object(full_data.get("character_rerun_info")),
+        weapon_rerun_info: normalize_rerun_info_object(full_data.get("weapon_rerun_info")),
     })
 }
 
@@ -438,6 +484,9 @@ fn parse_bundle_text(text: &str) -> Result<AccountBundle, String> {
     bundle.updated_at = normalize_string(&bundle.updated_at);
     bundle.character = normalize_record_object(&bundle.character);
     bundle.weapon = normalize_record_object(&bundle.weapon);
+    bundle.character_rerun_info =
+        normalize_rerun_info_object(Some(&bundle.character_rerun_info));
+    bundle.weapon_rerun_info = normalize_rerun_info_object(Some(&bundle.weapon_rerun_info));
     if bundle.character_max_seqid.trim().is_empty() {
         bundle.character_max_seqid = calc_max_seqid_from_records(&bundle.character);
     }
@@ -459,6 +508,8 @@ fn bundle_to_remote_value(bundle: &AccountBundle) -> Value {
         "updatedAt": bundle.updated_at.clone(),
         "character": bundle.character.clone(),
         "weapon": bundle.weapon.clone(),
+        "character_rerun_info": bundle.character_rerun_info.clone(),
+        "weapon_rerun_info": bundle.weapon_rerun_info.clone(),
     })
 }
 
@@ -468,6 +519,8 @@ fn bundle_to_hash_value(bundle: &AccountBundle) -> Value {
         "account": bundle.account.clone(),
         "character": bundle.character.clone(),
         "weapon": bundle.weapon.clone(),
+        "character_rerun_info": bundle.character_rerun_info.clone(),
+        "weapon_rerun_info": bundle.weapon_rerun_info.clone(),
     })
 }
 
@@ -650,25 +703,59 @@ fn record_score(value: &Value) -> usize {
         .unwrap_or(0)
 }
 
-fn normalize_record_for_conflict_compare(value: &Value) -> Value {
-    let Some(obj) = value.as_object() else {
-        return value.clone();
-    };
+fn is_core_record_field(key: &str) -> bool {
+    matches!(
+        key,
+        "seqId"
+            | "gachaTs"
+            | "poolId"
+            | "charId"
+            | "weaponId"
+            | "rarity"
+            | "isNew"
+            | "isFree"
+            | "weaponType"
+    )
+}
 
-    let mut normalized = Map::new();
-    let mut keys: Vec<_> = obj.keys().cloned().collect();
-    keys.sort();
+fn is_display_name_field(key: &str) -> bool {
+    matches!(key, "charName" | "weaponName" | "poolName")
+}
 
-    for key in keys {
-        if matches!(key.as_str(), "charName" | "weaponName" | "poolName") {
-            continue;
-        }
-        if let Some(item) = obj.get(&key) {
-            normalized.insert(key, item.clone());
+fn merge_compatible_records(current: &Value, candidate: &Value) -> Option<Value> {
+    let current_obj = current.as_object()?;
+    let candidate_obj = candidate.as_object()?;
+    for key in ["seqId", "gachaTs", "poolId"] {
+        if !current_obj.contains_key(key) || !candidate_obj.contains_key(key) {
+            return None;
         }
     }
 
-    Value::Object(normalized)
+    for key in current_obj.keys().chain(candidate_obj.keys()) {
+        if is_display_name_field(key) {
+            continue;
+        }
+        match (current_obj.get(key), candidate_obj.get(key)) {
+            (Some(a), Some(b)) if a == b => {}
+            (None, Some(_)) | (Some(_), None) if !is_core_record_field(key) => {}
+            _ => return None,
+        }
+    }
+
+    let mut merged = pick_richer_record(current, candidate);
+    let other = if merged == *current {
+        candidate_obj
+    } else {
+        current_obj
+    };
+    if let Some(merged_obj) = merged.as_object_mut() {
+        for (key, value) in other {
+            merged_obj
+                .entry(key.clone())
+                .or_insert_with(|| value.clone());
+        }
+    }
+    Some(merged)
 }
 
 fn pick_richer_record(current: &Value, candidate: &Value) -> Value {
@@ -688,12 +775,8 @@ fn merge_record_lists(local: &[Value], remote: &[Value]) -> Result<Vec<Value>, S
         if let Some(seq_id) = seq_id {
             if let Some(index) = seq_index.get(&seq_id).copied() {
                 let current = merged[index].1.clone();
-                let current_normalized = normalize_record_for_conflict_compare(&current);
-                let candidate_normalized = normalize_record_for_conflict_compare(item);
-                if current_normalized != candidate_normalized {
-                    return Err(format!("抽卡记录 seqId ({}) 存在字段差异", seq_id));
-                }
-                merged[index].1 = pick_richer_record(&current, item);
+                merged[index].1 = merge_compatible_records(&current, item)
+                    .ok_or_else(|| format!("抽卡记录 seqId ({}) 存在字段差异", seq_id))?;
             } else {
                 seq_index.insert(seq_id.clone(), merged.len());
                 merged.push((seq_id, item.clone()));
@@ -752,6 +835,45 @@ fn merge_record_maps(local: &Value, remote: &Value) -> Result<Value, String> {
         result.insert(key, Value::Array(merged));
     }
     Ok(Value::Object(result))
+}
+
+fn record_map_has_fields_missing_from(source: &Value, target: &Value) -> bool {
+    let Some(source_pools) = source.as_object() else {
+        return false;
+    };
+    for (pool, source_items) in source_pools {
+        let Some(target_items) = target.get(pool).and_then(Value::as_array) else {
+            continue;
+        };
+        let target_by_seq: HashMap<String, &Value> = target_items
+            .iter()
+            .filter_map(|item| Some((value_to_seqid(item.get("seqId")?)?, item)))
+            .collect();
+        for source_item in source_items.as_array().into_iter().flatten() {
+            let Some(seq_id) = source_item.get("seqId").and_then(value_to_seqid) else {
+                continue;
+            };
+            let (Some(source_obj), Some(target_obj)) = (
+                source_item.as_object(),
+                target_by_seq.get(&seq_id).and_then(|item| item.as_object()),
+            ) else {
+                continue;
+            };
+            if source_obj.keys().any(|key| {
+                !is_core_record_field(key)
+                    && !is_display_name_field(key)
+                    && !target_obj.contains_key(key)
+            }) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+fn bundle_has_fields_missing_from(source: &AccountBundle, target: &AccountBundle) -> bool {
+    record_map_has_fields_missing_from(&source.character, &target.character)
+        || record_map_has_fields_missing_from(&source.weapon, &target.weapon)
 }
 
 fn choose_recent_non_empty(primary: &str, secondary: &str) -> String {
@@ -830,6 +952,11 @@ fn merge_bundles(local: &AccountBundle, remote: &AccountBundle) -> Result<Accoun
         weapon_max_seqid: calc_max_seqid_from_records(&weapon),
         character,
         weapon,
+        character_rerun_info: merge_rerun_info(
+            &local.character_rerun_info,
+            &remote.character_rerun_info,
+        ),
+        weapon_rerun_info: merge_rerun_info(&local.weapon_rerun_info, &remote.weapon_rerun_info),
     })
 }
 
@@ -1413,7 +1540,7 @@ pub async fn webdav_sync_account(user_key: Option<String>) -> Result<WebDavSyncR
         "merged".to_string()
     };
 
-    let action = if !has_previous_state {
+    let mut action = if !has_previous_state {
         decide_without_state(
             &local_bundle,
             remote_bundle.as_ref(),
@@ -1431,6 +1558,15 @@ pub async fn webdav_sync_account(user_key: Option<String>) -> Result<WebDavSyncR
     } else {
         "merged".to_string()
     };
+
+    if let Some(remote_bundle) = remote_bundle.as_ref() {
+        if (action == "uploaded" && bundle_has_fields_missing_from(remote_bundle, &local_bundle))
+            || (action == "downloaded"
+                && bundle_has_fields_missing_from(&local_bundle, remote_bundle))
+        {
+            action = "merged".to_string();
+        }
+    }
 
     let mut warning_parts: Vec<String> = Vec::new();
     let now = now_iso_string();

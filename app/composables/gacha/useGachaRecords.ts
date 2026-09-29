@@ -1,6 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { Ref } from "vue";
-import type { EndFieldCharInfo, EndFieldWeaponInfo, GachaItem } from "~/types/gacha";
+import type {
+  EndFieldCharInfo,
+  EndFieldWeaponInfo,
+  GachaItem,
+  RerunCountMap,
+} from "~/types/gacha";
+import { mergeRerunCountMap, normalizeRerunCountMap } from "~/utils/gachaCalc";
+import { compareSeqId } from "~/utils/seqId";
 
 export const useGachaRecords = (params?: {
   loadPoolInfo?: () => Promise<void>;
@@ -15,24 +22,15 @@ export const useGachaRecords = (params?: {
     () => ({}),
   );
 
-  const isDigitsOnly = (value: string) => /^\d+$/.test(value);
-
-  const compareSeqId = (a: string, b: string) => {
-    if (a === b) return 0;
-
-    const aDigits = isDigitsOnly(a);
-    const bDigits = isDigitsOnly(b);
-
-    // Most seqId are numeric strings. Prefer stable string-based numeric compare to avoid Number overflow.
-    if (aDigits && bDigits) {
-      if (a.length !== b.length) return a.length > b.length ? 1 : -1;
-      return a.localeCompare(b);
-    }
-
-    // Fallback: put digit-like seqId ahead of non-digit; otherwise lex compare.
-    if (aDigits !== bDigits) return aDigits ? 1 : -1;
-    return a.localeCompare(b);
-  };
+  // 官方累计寻访/申领次数（`poolId → 累计次数`，随同步刷新）
+  const charRerunInfo = useState<RerunCountMap>(
+    "gacha-rerun-info-char",
+    () => ({}),
+  );
+  const weaponRerunInfo = useState<RerunCountMap>(
+    "gacha-rerun-info-weapon",
+    () => ({}),
+  );
 
   const readUserDataRaw = async (uid: string, type: "char" | "weapon") => {
     const commandRead =
@@ -42,6 +40,48 @@ export const useGachaRecords = (params?: {
     } catch (e) {
       console.error(e);
       return {};
+    }
+  };
+
+  const readRerunCounts = async (uid: string) => {
+    try {
+      const res = await invoke<Record<string, unknown>>("read_rerun_records", { uid });
+      if (params?.currentUid && params.currentUid.value !== uid) return;
+      charRerunInfo.value = normalizeRerunCountMap(res?.character_rerun_info);
+      weaponRerunInfo.value = normalizeRerunCountMap(res?.weapon_rerun_info);
+    } catch (e) {
+      console.error("[rerunInfo] read_rerun_records failed", e);
+      if (params?.currentUid && params.currentUid.value !== uid) return;
+      charRerunInfo.value = {};
+      weaponRerunInfo.value = {};
+    }
+  };
+
+  const saveRerunCounts = async (
+    uid: string,
+    type: "char" | "weapon",
+    counts: RerunCountMap,
+  ) => {
+    if (!uid || !counts) return;
+
+    // 若无累计次数时无需读写，直接跳过
+    const incoming = normalizeRerunCountMap(counts);
+    if (Object.keys(incoming).length === 0) return;
+
+    const field = type === "char" ? "character_rerun_info" : "weapon_rerun_info";
+    try {
+      const existing = await invoke<Record<string, unknown>>("read_rerun_records", { uid });
+      const merged = mergeRerunCountMap(
+        normalizeRerunCountMap(existing?.[field]),
+        incoming,
+      );
+      await invoke("save_rerun_records", { uid, data: { [field]: merged } });
+
+      if (params?.currentUid && params.currentUid.value !== uid) return;
+      if (type === "char") charRerunInfo.value = merged;
+      else weaponRerunInfo.value = merged;
+    } catch (e) {
+      console.error("[rerunInfo] save_rerun_records failed", e);
     }
   };
 
@@ -92,6 +132,7 @@ export const useGachaRecords = (params?: {
       if (type === "char") charRecords.value = data || {};
       else weaponRecords.value = data || {};
       if (type === "char") await params?.loadPoolInfo?.();
+      await readRerunCounts(uid);
     } catch (e) {
       console.error(e);
     }
@@ -144,8 +185,12 @@ export const useGachaRecords = (params?: {
   return {
     charRecords,
     weaponRecords,
+    charRerunInfo,
+    weaponRerunInfo,
     loadUserData,
     saveUserData,
+    readRerunCounts,
+    saveRerunCounts,
     readUserDataRaw,
     readMaxSeqIdFromMeta,
     getGlobalMaxSeqIdFromRaw: async (uid: string, type: "char" | "weapon") => {

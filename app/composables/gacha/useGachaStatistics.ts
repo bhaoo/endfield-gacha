@@ -4,22 +4,28 @@ import type {
   EndFieldWeaponInfo,
   GachaStatistics,
   PoolInfoEntry,
+  RerunCountMap,
 } from "~/types/gacha";
 import {
   JOINT_POOL_KEY,
+  RERUN_POOL_KEY,
   analyzePoolData,
   analyzeJointPoolData,
+  analyzeRerunPoolData,
   analyzeSpecialPoolData,
   analyzeWeaponPoolData,
   POOL_TYPES,
   SPECIAL_POOL_KEY,
 } from "~/utils/gachaCalc";
+import { compareSeqId } from "~/utils/seqId";
 
 export const useGachaStatistics = (params: {
   charRecords: Ref<Record<string, EndFieldCharInfo[]>>;
   weaponRecords: Ref<Record<string, EndFieldWeaponInfo[]>>;
   poolInfoById: ComputedRef<Record<string, PoolInfoEntry>>;
   poolInfo: Ref<PoolInfoEntry[]>;
+  charRerunInfo: Ref<RerunCountMap>;
+  weaponRerunInfo: Ref<RerunCountMap>;
 }) => {
   const charStatistics = computed(() => {
     if (!params.charRecords.value) return [];
@@ -32,6 +38,14 @@ export const useGachaStatistics = (params: {
 
       if (poolType === SPECIAL_POOL_KEY) {
         out.push(...analyzeSpecialPoolData(list, params.poolInfoById.value));
+      } else if (poolType === RERUN_POOL_KEY) {
+        out.push(
+          ...analyzeRerunPoolData(
+            list,
+            params.poolInfoById.value,
+            params.charRerunInfo.value,
+          ),
+        );
       } else if (poolType === JOINT_POOL_KEY) {
         out.push(...analyzeJointPoolData(list, params.poolInfoById.value));
       } else out.push(analyzePoolData(poolType, list));
@@ -43,24 +57,65 @@ export const useGachaStatistics = (params: {
       out.push(analyzePoolData(k, list as any));
     }
 
-    return out;
+    // 无有效抽卡的池（即记录为空）不进行展示
+    return out.filter((s) => s.totalPulls > 0);
   });
 
   const weaponStatistics = computed(() => {
     if (!params.weaponRecords.value) return [];
 
-    const weaponUp6ByPoolId: Record<string, string> = {};
+    const weaponInfoByPoolId: Record<string, PoolInfoEntry> = {};
     for (const it of params.poolInfo.value || []) {
       if (!it) continue;
       if (it.pool_gacha_type !== "weapon") continue;
       if (!it.pool_id) continue;
-      if (!it.up6_id) continue;
-      weaponUp6ByPoolId[it.pool_id] = it.up6_id;
+      weaponInfoByPoolId[it.pool_id] = it;
     }
 
-    return Object.keys(params.weaponRecords.value).map((k) =>
-      analyzeWeaponPoolData(k, params.weaponRecords.value[k]!, weaponUp6ByPoolId[k]),
-    );
+    // seqId 全局递增：各池取自身最大值，其中最大者即当前池
+    const maxSeqIdByPool: Record<string, string> = {};
+    let currentPoolId = "";
+    let globalMaxSeqId = "";
+    for (const [poolKey, list] of Object.entries(params.weaponRecords.value)) {
+      for (const item of list || []) {
+        const seqId = String(item?.seqId || "");
+        if (!seqId) continue;
+        const poolMax = maxSeqIdByPool[poolKey];
+        if (!poolMax || compareSeqId(seqId, poolMax) > 0) {
+          maxSeqIdByPool[poolKey] = seqId;
+        }
+      }
+
+      const poolMaxSeqId = maxSeqIdByPool[poolKey];
+      if (!poolMaxSeqId) continue;
+      if (!globalMaxSeqId || compareSeqId(poolMaxSeqId, globalMaxSeqId) > 0) {
+        globalMaxSeqId = poolMaxSeqId;
+        currentPoolId = poolKey;
+      }
+    }
+
+    return Object.keys(params.weaponRecords.value)
+      .sort((a, b) => {
+        const aMax = maxSeqIdByPool[a];
+        const bMax = maxSeqIdByPool[b];
+        if (!aMax && !bMax) return 0;
+        if (!aMax) return 1;
+        if (!bMax) return -1;
+        return compareSeqId(bMax, aMax);
+      })
+      .map((poolKey) => {
+        const info = weaponInfoByPoolId[poolKey];
+        const stat = analyzeWeaponPoolData(
+          poolKey,
+          params.weaponRecords.value[poolKey]!,
+          info?.up6_id,
+          params.weaponRerunInfo.value,
+        );
+        stat.isCurrentPool = poolKey === currentPoolId;
+        return stat;
+      })
+      // 无有效申领记录的池（如仅同步到卡池列表）不进行展示
+      .filter((stat) => stat.totalPulls > 0);
   });
 
   return { charStatistics, weaponStatistics };

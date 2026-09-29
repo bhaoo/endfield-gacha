@@ -1,2 +1,41 @@
 @import "tailwindcss";
 @import "@nuxt/ui";
+
+/* 全局所有滚动条 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgb(0 0 0 / 20%);
+  border-radius: 4px;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: rgb(255 255 255 / 25%);
+}
+
+.scrollbar-hidden {
+  overflow: hidden auto;
+  &::-webkit-scrollbar-thumb {
+    background: rgb(0 0 0 / 0%);
+  }
+}
+
+.scrollbar-hover {
+  &::-webkit-scrollbar-thumb {
+    background: rgb(0 0 0 / 20%);
+    border-radius: 4px;
+  }
+}
+
+.dark .scrollbar-hover {
+  &:hover::-webkit-scrollbar-thumb {
+    background: rgb(255 255 255 / 25%);
+  }
+}
