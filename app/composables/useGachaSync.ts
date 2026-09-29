@@ -148,7 +148,17 @@ export const useGachaSync = () => {
         );
         return;
       }
-      if (existing && (!existing.token || existing.source === "log")) {
+      if (existing?.source === "login" && !existing.token) {
+        showToast(
+          `${actionLabel}失败`,
+          "该账号缺少 Token。请通过“添加账号”重新登录后同步。",
+        );
+        return;
+      }
+      if (
+        existing &&
+        (existing.source === "log" || (!existing.source && !existing.token))
+      ) {
         const provider =
           existing.provider === "gryphline" ? "gryphline" : "hypergryph";
         logSystemUid =
