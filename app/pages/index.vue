@@ -170,7 +170,7 @@
             <div class="flex items-center justify-between">
               <h3 class="font-semibold">6★ 历史记录</h3>
               <span class="text-xs text-muted">
-                出卡 {{ history6.length }} 次 · 歪 {{ offCount }} 次 · 新 {{ newCount }} 个
+                出卡 {{ history6.length }} 次 · 歪 {{ offCount }} 次 · UP {{ newCount }} 个
               </span>
             </div>
           </template>
