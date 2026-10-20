@@ -292,6 +292,22 @@ fn default_pool_info() -> serde_json::Value {
             "pool_type": "rerun",
             "up6_id": "wpn_pistol_0010",
             "version_num": "1"
+        },
+        {
+            "pool_gacha_type": "char",
+            "pool_id": "special_1_6_1",
+            "pool_name": "万物更新",
+            "pool_type": "special",
+            "up6_id": "chr_0036_jsspsi",
+            "version_num": "0"
+        },
+        {
+            "pool_gacha_type": "weapon",
+            "pool_id": "weaponbox_1_6_1",
+            "pool_name": "篆玉申领",
+            "pool_type": "special",
+            "up6_id": "wpn_claym_0018",
+            "version_num": "0"
         }
     ])
 }
