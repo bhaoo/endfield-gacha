@@ -308,6 +308,38 @@ fn default_pool_info() -> serde_json::Value {
             "pool_type": "special",
             "up6_id": "wpn_claym_0018",
             "version_num": "0"
+        },
+        {
+            "pool_gacha_type": "char",
+            "pool_id": "rerun_chr_tangtang",
+            "pool_name": "祖泉的新流",
+            "pool_type": "rerun",
+            "up6_id": "chr_0027_tangtang",
+            "version_num": "1"
+        },
+        {
+            "pool_gacha_type": "weapon",
+            "pool_id": "rerun_wpn_tangtang",
+            "pool_name": "细枝申领",
+            "pool_type": "rerun",
+            "up6_id": "wpn_pistol_0011",
+            "version_num": "1"
+        },
+        {
+            "pool_gacha_type": "char",
+            "pool_id": "special_1_6_2",
+            "pool_name": "烟火邀星河",
+            "pool_type": "special",
+            "up6_id": "chr_0037_minghe",
+            "version_num": "0"
+        },
+        {
+            "pool_gacha_type": "weapon",
+            "pool_id": "weaponbox_1_6_2",
+            "pool_name": "月映申领",
+            "pool_type": "special",
+            "up6_id": "wpn_sword_0025",
+            "version_num": "0"
         }
     ])
 }
