@@ -363,7 +363,7 @@ const poolOptions = computed(() => {
 // 重构寻访卡池名带版本后缀（如「河流的女儿#2」），版本号取自 poolInfo
 const subPoolLabel = (s: GachaStatistics) => {
   const versionNum = poolInfoById.value[s.poolId || '']?.version_num
-  return versionNum ? `${s.poolName}#${versionNum}` : s.poolName
+  return s.poolType === RERUN_POOL_KEY && versionNum ? `${s.poolName}#${versionNum}` : s.poolName
 }
 
 // 当前类型下「全部卡池」的聚合视图
